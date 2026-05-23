@@ -28,7 +28,7 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
     const compressed = await compressImage(file, 1200);
     setImagePreview(compressed);
     try {
-      const blob = await fetch(compressed).then((r) => r.blob());
+      const blob = dataURLToBlob(compressed);
       const fd = new FormData();
       fd.append("image", blob, file.name);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
@@ -170,6 +170,15 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
+}
+
+function dataURLToBlob(dataURL: string): Blob {
+  const [header, b64] = dataURL.split(",");
+  const mime = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
 }
 
 async function compressImage(file: File, maxWidth: number): Promise<string> {
