@@ -20,6 +20,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ rows, imageData: `data:${mediaType};base64,${base64}` });
   } catch (err) {
     console.error("Upload error:", err);
-    return NextResponse.json({ error: "Failed to process image" }, { status: 500 });
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    const friendly = msg.includes("API key") || msg.includes("auth")
+      ? "API key not configured — contact the app owner"
+      : msg.includes("Could not process image") || msg.includes("invalid")
+      ? "Could not read the image — try a clearer photo"
+      : "Failed to process image";
+    return NextResponse.json({ error: friendly }, { status: 500 });
   }
 }

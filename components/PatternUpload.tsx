@@ -13,6 +13,14 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  function retryUpload() {
+    setStep("upload");
+    setError("");
+    setImagePreview(null);
+    setRows([]);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   async function handleFile(file: File) {
     setError(""); setLoading(true); setStep("review");
     const compressed = await compressImage(file, 1200);
@@ -66,7 +74,7 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
                 <p style={{ margin: 0, fontWeight: 600, color: "#4c1d95" }}>Take a photo or upload an image</p>
                 <p style={{ margin: "0.375rem 0 0", fontSize: "0.8rem", color: "#8b5cf6" }}>Claude AI will extract your pattern automatically</p>
               </div>
-              <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
               <button onClick={() => { setRows([{ label: "Row 1", steps: ["k1"] }]); setStep("review"); }}
                 style={{ width: "100%", marginTop: "0.875rem", padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontSize: "0.875rem" }}>
                 Enter manually instead
@@ -84,7 +92,15 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
                   <p style={{ color: "#8b5cf6", fontSize: "0.875rem" }}>Claude is reading your pattern…</p>
                 </div>
               )}
-              {error && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "0.75rem 1rem", color: "#dc2626", fontSize: "0.875rem", marginBottom: "1rem" }}>{error}</div>}
+              {error && (
+                <div style={{ marginBottom: "1rem" }}>
+                  <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "0.75rem 1rem", color: "#dc2626", fontSize: "0.875rem", marginBottom: "0.75rem" }}>{error}</div>
+                  <button onClick={retryUpload}
+                    style={{ width: "100%", padding: "0.75rem", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "0.875rem", boxShadow: "0 4px 12px rgba(124,58,237,0.3)" }}>
+                    Try a Different Photo
+                  </button>
+                </div>
+              )}
               {!loading && rows.length > 0 && (
                 <div>
                   <p style={{ margin: "0 0 1rem", fontSize: "0.8rem", color: "#8b5cf6" }}>Review and edit the extracted steps:</p>
