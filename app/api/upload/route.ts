@@ -23,11 +23,13 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("Upload error:", err);
     const msg = err instanceof Error ? err.message : "Unknown error";
-    const friendly = msg.includes("API key") || msg.includes("auth")
-      ? "API key not configured — contact the app owner"
-      : msg.includes("Could not process image") || msg.includes("invalid")
+    const friendly = msg.includes("API key") || msg.includes("auth") || msg.includes("401")
+      ? "Anthropic API key is invalid or has no credits — update ANTHROPIC_API_KEY in Railway"
+      : msg.includes("Could not process image") || msg.includes("invalid_request")
       ? "Could not read the image — try a clearer photo"
-      : "Failed to process image";
+      : msg.includes("overloaded") || msg.includes("529")
+      ? "AI is overloaded — please try again in a moment"
+      : "Failed to process image — please try again";
     return NextResponse.json({ error: friendly }, { status: 500 });
   }
 }
