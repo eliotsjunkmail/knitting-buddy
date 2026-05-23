@@ -27,9 +27,9 @@ export default function PatternCard({ pattern, onDelete }: { pattern: Pattern; o
   useEffect(() => {
     if (!canvasRef.current || grid.length === 0) return;
     cancelRef.current?.();
-    cancelRef.current = animateSwatch(canvasRef.current, grid);
+    cancelRef.current = animateSwatch(canvasRef.current, grid, { currentRow });
     return () => { cancelRef.current?.(); };
-  }, [grid]);
+  }, [grid, currentRow]);
 
   return (
     <div

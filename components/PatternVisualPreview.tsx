@@ -15,10 +15,11 @@ function saveImage(canvas: HTMLCanvasElement, filename: string) {
 }
 
 export default function PatternVisualPreview({
-  rows, name, onClose,
+  rows, name, currentRow = 0, onClose,
 }: {
   rows: Row[];
   name: string;
+  currentRow?: number;
   onClose: () => void;
 }) {
   const canvasRef      = useRef<HTMLCanvasElement>(null);
@@ -32,9 +33,9 @@ export default function PatternVisualPreview({
   useEffect(() => {
     if (!canvasRef.current || grid.length === 0) return;
     cancelRef.current?.();
-    cancelRef.current = animateSwatch(canvasRef.current, grid);
+    cancelRef.current = animateSwatch(canvasRef.current, grid, { currentRow });
     return () => { cancelRef.current?.(); };
-  }, [grid]);
+  }, [grid, currentRow]);
 
   useEffect(() => {
     if (!enlarged || !largeCanvasRef.current) return;

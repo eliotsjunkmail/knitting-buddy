@@ -121,14 +121,19 @@ export function expandSteps(steps: string[]): Stitch[] {
 // ── Cell drawing (shared by static and animated renderers) ────────────────────
 function clamp(v: number) { return Math.max(0, Math.min(255, Math.round(v))); }
 
+// alpha defaults to 1 (full opacity). Pass < 1 for the washed-out light pass.
 function drawCell(
   ctx: CanvasRenderingContext2D,
   stitch: Stitch,
   x: number, y: number,
   CW: number, CH: number,
   lw: number,
-  r: number, c: number,   // for jitter seed
+  r: number, c: number,
+  alpha = 1,
 ) {
+  const prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = alpha;
+
   const pal = PALETTE[stitch] ?? PALETTE.knit;
 
   // Per-stitch brightness jitter ±4
@@ -159,9 +164,9 @@ function drawCell(
     case "yo":
       ctx.beginPath();
       ctx.arc(x + CW * 0.50, y + CH * 0.50, CW * 0.24, 0, Math.PI * 2);
-      ctx.globalAlpha = 0.55;
+      ctx.globalAlpha = alpha * 0.55;
       ctx.stroke();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = alpha; // restore to cell alpha (not global 1)
       break;
     case "decrease":
       ctx.beginPath();
@@ -192,6 +197,8 @@ function drawCell(
   // Hairline row divider
   ctx.fillStyle = "rgba(0,0,0,0.04)";
   ctx.fillRect(x, y + CH - 1, CW, 1);
+
+  ctx.globalAlpha = prevAlpha;
 }
 
 // ── Layout helper (shared setup) ─────────────────────────────────────────────
@@ -246,50 +253,86 @@ export function renderSwatch(canvas: HTMLCanvasElement, grid: Stitch[][]): void 
   }
 }
 
-// ── Animated renderer — left-to-right, top-to-bottom (typewriter/knitting) ───
+// ── Animated renderer — two-phase typewriter animation ───────────────────────
+//
+// Phase 1: entire grid drawn washed-out (α≈0.3), left→right top→bottom
+// Phase 2: rows the user has already worked (bottom of canvas) redrawn at full
+//          opacity on top of the light layer, left→right top→bottom
+//
+// currentRow: 0-based pattern row index (from progress). Rows 0..currentRow are
+//             considered "done" and get the dark overlay in phase 2.
+//
 // Returns a cancel function; call it on component unmount.
 export function animateSwatch(
   canvas: HTMLCanvasElement,
   grid: Stitch[][],
-  onDone?: () => void,
+  opts?: { currentRow?: number; onDone?: () => void },
 ): () => void {
   const layout = buildLayout(canvas, grid);
   if (!layout) return () => {};
-  const { ctx, CW, CH, lw, cells } = layout;
+  const { ctx, CW, CH, lw, cells, rowCount } = layout;
 
   const total = cells.length;
   if (total === 0) return () => {};
 
-  // ~20 rows per second feel; cap total time at 3 s
-  const rowCount = layout.rowCount;
-  const durationMs = Math.min(3000, Math.max(600, rowCount * 50));
+  // Which visual row corresponds to the user's current pattern row?
+  // Pattern row 0 = visual row rowCount-1 (bottom); pattern row rowCount-1 = visual row 0 (top).
+  const currentRow = Math.min(opts?.currentRow ?? 0, rowCount - 1);
+  const visualProgressRow = rowCount - 1 - currentRow;
 
-  let drawn = 0;
+  // First cell in the flat array that belongs to the completed section
+  // (visual rows >= visualProgressRow, i.e. current row and all rows below it)
+  let progressStart = cells.findIndex(cell => cell.r >= visualProgressRow);
+  if (progressStart < 0) progressStart = total;
+
+  const completedCells = total - progressStart;
+  const completedFrac  = completedCells / Math.max(1, total);
+
+  // Timing: phase 1 covers whole grid; phase 2 is proportional to completion
+  const p1Duration = Math.min(2000, Math.max(400, rowCount * 30));
+  const p2Duration = completedCells > 0
+    ? Math.max(300, completedFrac * Math.min(1500, Math.max(300, rowCount * 25)))
+    : 0;
+
+  let drawn     = 0;
   let cancelled = false;
-  const startTime = performance.now();
 
-  function frame(now: number) {
+  function runPhase1(t0: number, now: number) {
     if (cancelled) return;
-
-    const elapsed = now - startTime;
-    const progress = Math.min(elapsed / durationMs, 1);
-    const target = Math.floor(progress * total);
-
-    // Draw only the newly revealed cells (canvas retains what's already there)
+    const p      = Math.min((now - t0) / p1Duration, 1);
+    const target = Math.floor(p * total);
     while (drawn < target) {
       const { stitch, x, y, r, c } = cells[drawn];
-      drawCell(ctx, stitch, x, y, CW, CH, lw, r, c);
+      drawCell(ctx, stitch, x, y, CW, CH, lw, r, c, 0.28); // washed-out light pass
       drawn++;
     }
-
-    if (progress < 1) {
-      requestAnimationFrame(frame);
+    if (p < 1) {
+      requestAnimationFrame(t => runPhase1(t0, t));
+    } else if (completedCells > 0) {
+      drawn = progressStart;
+      requestAnimationFrame(t => runPhase2(t, t));
     } else {
-      onDone?.();
+      opts?.onDone?.();
     }
   }
 
-  requestAnimationFrame(frame);
+  function runPhase2(t0: number, now: number) {
+    if (cancelled) return;
+    const p      = Math.min((now - t0) / p2Duration, 1);
+    const target = progressStart + Math.floor(p * completedCells);
+    while (drawn < target) {
+      const { stitch, x, y, r, c } = cells[drawn];
+      drawCell(ctx, stitch, x, y, CW, CH, lw, r, c, 1); // full-color overlay
+      drawn++;
+    }
+    if (p < 1) {
+      requestAnimationFrame(t => runPhase2(t0, t));
+    } else {
+      opts?.onDone?.();
+    }
+  }
+
+  requestAnimationFrame(t => runPhase1(t, t));
   return () => { cancelled = true; };
 }
 

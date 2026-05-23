@@ -248,7 +248,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
         </div>
       </div>
 
-      {showPreview && <PatternVisualPreview rows={rows} name={pattern.name} onClose={() => setShowPreview(false)} />}
+      {showPreview && <PatternVisualPreview rows={rows} name={pattern.name} currentRow={currentRow} onClose={() => setShowPreview(false)} />}
 
       {showImage && pattern.imageData && (
         <div onClick={() => setShowImage(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
