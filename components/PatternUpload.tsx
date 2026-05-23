@@ -33,7 +33,8 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
     setError(""); setLoading(true);
     if (!append) setStep("review");
     const compressed = await compressImage(file, 1200);
-    if (!append) setImagePreview(compressed);
+    const toStore = append ? compressed : await rotateDataUrl(compressed, 180);
+    if (!append) setImagePreview(toStore);
     try {
       const blob = dataURLToBlob(compressed);
       const fd = new FormData();
@@ -47,7 +48,7 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
         setPageCount((n) => n + 1);
       } else {
         setRows(data.rows as Row[]);
-        setImageData(data.imageData);
+        setImageData(toStore);
         if (data.name) setPatternName(data.name);
         setPageCount(1);
       }
@@ -274,5 +275,23 @@ async function compressImage(file: File, maxWidth: number): Promise<string> {
       resolve(canvas.toDataURL("image/jpeg", 0.85));
     };
     img.src = url;
+  });
+}
+
+async function rotateDataUrl(dataUrl: string, deg: number): Promise<string> {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const swap = deg === 90 || deg === 270;
+      const canvas = document.createElement("canvas");
+      canvas.width  = swap ? img.height : img.width;
+      canvas.height = swap ? img.width  : img.height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((deg * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      resolve(canvas.toDataURL("image/jpeg", 0.9));
+    };
+    img.src = dataUrl;
   });
 }

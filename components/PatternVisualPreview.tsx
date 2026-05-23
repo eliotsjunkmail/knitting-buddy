@@ -25,38 +25,105 @@ function parseCableCount(s: string): number {
   return 0;
 }
 
-function expandSteps(steps: string[]): Stitch[] {
+// Split a comma/space separated token list (used for bracket repeat expansion)
+function splitTokens(s: string): string[] {
+  return s.split(/[,\s]+/).map(t => t.trim()).filter(Boolean);
+}
+
+function expandSingleStep(s: string): Stitch[] {
   const out: Stitch[] = [];
-  for (const raw of steps) {
-    const s = raw.toLowerCase().replace(/\s+/g, "").trim();
-    if (!s || s === "-") { out.push("knit"); continue; }
-    if (s === "yo") { out.push("yo"); continue; }
-    if (/k2tog|ssk|skpo?|k3tog|s2kp|cdd|p2tog|p3tog|p2togtbl/.test(s)) { out.push("decrease"); continue; }
-    const cn = parseCableCount(s);
-    if (cn > 0) {
-      const half = Math.floor(cn / 2);
-      for (let i = 0; i < half; i++) out.push("cable-hi");
-      for (let i = half; i < cn; i++) out.push("cable-lo");
-      continue;
-    }
-    if (/^sl\d*[kwp]?$/.test(s) || s === "slk" || s === "slp") { out.push("slip"); continue; }
-    const pm = s.match(/^p(\d*)(?:tbl)?$/);
-    if (pm || s === "pb") {
-      const n = pm ? (parseInt(pm[1] || "1") || 1) : 1;
-      for (let i = 0; i < n; i++) out.push("purl");
-      continue;
-    }
-    const km = s.match(/^k(\d*)(?:tbl|fb)?$/);
-    if (km) {
-      const n = parseInt(km[1] || "1") || 1;
-      for (let i = 0; i < n; i++) out.push("knit");
-      continue;
-    }
-    if (/^m1[lr]?$|^kfb$|^pfb$/.test(s)) { out.push("knit"); continue; }
-    if (/^co$|^bo$|^cast|^bind/.test(s)) continue;
-    out.push("knit");
+  if (!s || s === "-") { out.push("knit"); return out; }
+  if (s === "yo") { out.push("yo"); return out; }
+  if (/k2tog|ssk|skpo?|k3tog|s2kp|cdd|p2tog|p3tog|p2togtbl/.test(s)) { out.push("decrease"); return out; }
+  const cn = parseCableCount(s);
+  if (cn > 0) {
+    const half = Math.floor(cn / 2);
+    for (let i = 0; i < half; i++) out.push("cable-hi");
+    for (let i = half; i < cn; i++) out.push("cable-lo");
+    return out;
   }
-  return out.length > 0 ? out : ["knit"];
+  if (/^sl\d*[kwp]?$/.test(s) || s === "slk" || s === "slp") { out.push("slip"); return out; }
+  const pm = s.match(/^p(\d*)(?:tbl)?$/);
+  if (pm || s === "pb") {
+    const n = pm ? (parseInt(pm[1] || "1") || 1) : 1;
+    for (let i = 0; i < n; i++) out.push("purl");
+    return out;
+  }
+  const km = s.match(/^k(\d*)(?:tbl|fb)?$/);
+  if (km) {
+    const n = parseInt(km[1] || "1") || 1;
+    for (let i = 0; i < n; i++) out.push("knit");
+    return out;
+  }
+  if (/^m1[lr]?$|^kfb$|^pfb$/.test(s)) { out.push("knit"); return out; }
+  if (/^co$|^bo$|^cast|^bind/.test(s)) return out;
+  out.push("knit");
+  return out;
+}
+
+function expandSteps(steps: string[]): Stitch[] {
+  // Phase 1 — expand bracket / parenthesis repeats within a single step token
+  // Handles: "[k2,p2]x3", "(k2 p2)*4", "rep [k2,p2] 4 times"
+  const phase1: string[] = [];
+  for (const raw of steps) {
+    const s = raw.trim();
+    const brm = s.match(/^(?:rep(?:eat)?\s+)?[\[(](.+?)[\])]\s*[x×*]?\s*(\d+)\s*(?:times?)?$/i);
+    if (brm) {
+      const inner = splitTokens(brm[1]);
+      const n = parseInt(brm[2]);
+      for (let i = 0; i < n; i++) phase1.push(...inner);
+      continue;
+    }
+    phase1.push(s);
+  }
+
+  // Phase 2 — handle * anchors and rep instructions across the step array
+  const out: Stitch[] = [];
+  let anchor = -1; // index in out[] where last * was placed
+
+  for (const raw of phase1) {
+    const s = raw.toLowerCase().replace(/\s+/g, "").trim();
+    if (!s) continue;
+
+    // "rep * N times" / "rep from * N times" / "×N" / "*Ntimes"
+    const repN = s.match(/rep(?:eat)?(?:from)?\*?(\d+)(?:more)?times?/i)
+              || s.match(/repfrom\*(\d+)/i)
+              || s.match(/\*\s*(\d+)\s*times?/i)
+              || s.match(/[×x](\d+)/i);
+    if (repN && anchor >= 0) {
+      const n = parseInt(repN[1]);
+      const seg = out.slice(anchor);
+      for (let i = 1; i < n; i++) out.push(...seg);
+      anchor = -1;
+      continue;
+    }
+
+    // "rep from * to end" / "rep to end" — fill to a sensible width
+    if (/rep.*\*.*end|repfrom\*toend|reptoend|rep.*toend/.test(s) && anchor >= 0) {
+      const seg = out.slice(anchor);
+      if (seg.length > 0) {
+        const target = Math.max(out.length + seg.length, 40);
+        while (out.length < target) out.push(...seg);
+        if (out.length > target) out.length = target;
+      }
+      anchor = -1;
+      continue;
+    }
+
+    // Standalone * = start of repeat region
+    if (s === "*" || s === "**") { anchor = out.length; continue; }
+
+    // Step starting with * (e.g. "*k2") — marks repeat start then processes the stitch
+    let stepStr = s;
+    if (s.startsWith("*") && s.length > 1 && !s.includes("rep")) {
+      anchor = out.length;
+      stepStr = s.slice(1).trim();
+    }
+
+    out.push(...expandSingleStep(stepStr));
+  }
+
+  return out.length > 0 ? out : ["knit" as Stitch];
 }
 
 // ── Canvas renderer ───────────────────────────────────────────────────────────
