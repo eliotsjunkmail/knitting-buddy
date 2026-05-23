@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String    @id @default(cuid())
+  username  String    @unique
+  password  String
+  createdAt DateTime  @default(now())
+  patterns  Pattern[]
+}
+
+model Pattern {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  imageData String?   @db.Text
+  rows      Json
+  progress  Progress?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Progress {
+  id          String   @id @default(cuid())
+  patternId   String   @unique
+  pattern     Pattern  @relation(fields: [patternId], references: [id], onDelete: Cascade)
+  currentRow  Int      @default(0)
+  currentStep Int      @default(0)
+  lastUsed    DateTime @default(now())
+  timePerStep Json     @default("{}")
+  updatedAt   DateTime @updatedAt
+}
