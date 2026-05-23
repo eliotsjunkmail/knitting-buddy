@@ -14,8 +14,11 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pageCount, setPageCount] = useState(0);
+  const [agreed, setAgreed] = useState(false);
+  const [showAgreementHint, setShowAgreementHint] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const addPageRef = useRef<HTMLInputElement>(null);
+  const agreementRef = useRef<HTMLLabelElement>(null);
 
   function retryUpload() {
     setStep("upload");
@@ -53,6 +56,14 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
     } finally { setLoading(false); }
   }
 
+  function requireAgreement(): boolean {
+    if (agreed) return true;
+    setShowAgreementHint(true);
+    agreementRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => setShowAgreementHint(false), 2200);
+    return false;
+  }
+
   function handleFile(file: File) { processImage(file, false); }
   function handleAddPage(file: File) { processImage(file, true); }
 
@@ -87,16 +98,54 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
           {/* Upload */}
           {step === "upload" && (
             <div>
-              <div onClick={() => fileRef.current?.click()}
-                style={{ border: "2px dashed #c4b5fd", borderRadius: "16px", padding: "3rem 2rem", textAlign: "center", cursor: "pointer", background: "#faf5ff", transition: "all 0.2s" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "#7c3aed"; (e.currentTarget as HTMLDivElement).style.background = "#f5f3ff"; }}
+              {/* Agreement checkbox */}
+              <label
+                ref={agreementRef}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: "0.75rem",
+                  cursor: "pointer", marginBottom: "1rem",
+                  background: agreed ? "#f5f3ff" : showAgreementHint ? "#fff7ed" : "#faf5ff",
+                  border: `2px solid ${agreed ? "#a78bfa" : showAgreementHint ? "#fb923c" : "#ede9fe"}`,
+                  borderRadius: "12px", padding: "0.875rem 1rem",
+                  transition: "border-color 0.2s, background 0.2s",
+                  boxShadow: showAgreementHint ? "0 0 0 3px rgba(251,146,60,0.25)" : "none",
+                }}>
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  style={{ marginTop: "0.15rem", width: "18px", height: "18px", accentColor: "#7c3aed", flexShrink: 0, cursor: "pointer" }}
+                />
+                <span style={{ fontSize: "0.825rem", color: "#4c1d95", lineHeight: 1.5 }}>
+                  I confirm that I have the right to upload this pattern — I created it, own it, or have the copyright holder&apos;s permission to digitise and store it.
+                </span>
+              </label>
+
+              {showAgreementHint && (
+                <p style={{ margin: "-0.5rem 0 0.875rem", fontSize: "0.8rem", color: "#ea580c", fontWeight: 600 }}>
+                  ☝️ Please confirm the agreement above first.
+                </p>
+              )}
+
+              {/* Drop zone */}
+              <div
+                onClick={() => { if (!requireAgreement()) return; fileRef.current?.click(); }}
+                style={{
+                  border: "2px dashed #c4b5fd", borderRadius: "16px", padding: "3rem 2rem",
+                  textAlign: "center", cursor: agreed ? "pointer" : "not-allowed",
+                  background: "#faf5ff", transition: "all 0.2s",
+                  opacity: agreed ? 1 : 0.55,
+                }}
+                onMouseEnter={(e) => { if (!agreed) return; (e.currentTarget as HTMLDivElement).style.borderColor = "#7c3aed"; (e.currentTarget as HTMLDivElement).style.background = "#f5f3ff"; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "#c4b5fd"; (e.currentTarget as HTMLDivElement).style.background = "#faf5ff"; }}>
                 <div style={{ fontSize: "3rem", marginBottom: "0.75rem" }}>📷</div>
                 <p style={{ margin: 0, fontWeight: 600, color: "#4c1d95" }}>Take a photo or upload an image</p>
                 <p style={{ margin: "0.375rem 0 0", fontSize: "0.8rem", color: "#8b5cf6" }}>Claude AI will extract your pattern automatically</p>
               </div>
-              <button onClick={() => { setRows([{ label: "Row 1", steps: ["k1"] }]); setStep("review"); }}
-                style={{ width: "100%", marginTop: "0.875rem", padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontSize: "0.875rem" }}>
+
+              <button
+                onClick={() => { if (!requireAgreement()) return; setRows([{ label: "Row 1", steps: ["k1"] }]); setStep("review"); }}
+                style={{ width: "100%", marginTop: "0.875rem", padding: "0.75rem", background: "transparent", color: agreed ? "#8b5cf6" : "#c4b5fd", border: "1px solid #ede9fe", borderRadius: "10px", cursor: agreed ? "pointer" : "not-allowed", fontSize: "0.875rem" }}>
                 Enter manually instead
               </button>
             </div>
