@@ -1,103 +1,75 @@
 "use client";
 import { formatDuration } from "@/lib/utils";
 
-interface Row {
-  label: string;
-  steps: string[];
-}
+interface Row { label: string; steps: string[] }
 
-interface Props {
-  rows: Row[];
-  timePerStep: Record<string, number>;
-  onClose: () => void;
-}
+export default function StatsPanel({ rows, timePerStep, onClose }: { rows: Row[]; timePerStep: Record<string, number>; onClose: () => void }) {
+  const entries = Object.entries(timePerStep).map(([key, secs]) => {
+    const [ri, si] = key.split("-").map(Number);
+    return { key, step: rows[ri]?.steps?.[si] ?? "?", label: rows[ri]?.label ?? `Row ${ri + 1}`, secs };
+  }).sort((a, b) => b.secs - a.secs);
 
-export default function StatsPanel({ rows, timePerStep, onClose }: Props) {
-  const allEntries = Object.entries(timePerStep)
-    .map(([key, secs]) => {
-      const [ri, si] = key.split("-").map(Number);
-      const row = rows[ri];
-      const step = row?.steps?.[si] ?? "?";
-      return { key, ri, si, step, label: row?.label ?? `Row ${ri + 1}`, secs };
-    })
-    .sort((a, b) => b.secs - a.secs);
-
-  const totalTime = allEntries.reduce((s, e) => s + e.secs, 0);
-  const stepsVisited = allEntries.length;
+  const total = entries.reduce((s, e) => s + e.secs, 0);
   const totalSteps = rows.reduce((s, r) => s + r.steps.length, 0);
+  const max = entries[0]?.secs || 1;
 
   return (
-    <div className="fixed inset-0 bg-purple-950/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl shadow-purple-200 max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-purple-100">
-          <h2 className="text-lg font-semibold text-purple-900">Time Stats</h2>
-          <button onClick={onClose} className="text-purple-300 hover:text-purple-500 text-xl">✕</button>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(76,29,149,0.5)", backdropFilter: "blur(4px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "1rem" }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "white", width: "100%", maxWidth: "480px", borderRadius: "20px 20px 16px 16px", boxShadow: "0 -8px 40px rgba(0,0,0,0.2)", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid #ede9fe", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "#4c1d95" }}>Time Stats</h2>
+          <button onClick={onClose} style={{ width: "32px", height: "32px", background: "#f5f3ff", border: "none", borderRadius: "8px", color: "#8b5cf6", fontSize: "1rem", cursor: "pointer" }}>✕</button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1">
-          {/* Summary */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-purple-50 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-purple-700">{formatDuration(totalTime)}</p>
-              <p className="text-xs text-purple-400 mt-0.5">Total time</p>
-            </div>
-            <div className="bg-purple-50 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-purple-700">{stepsVisited}</p>
-              <p className="text-xs text-purple-400 mt-0.5">Steps timed</p>
-            </div>
-            <div className="bg-purple-50 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-purple-700">
-                {stepsVisited > 0 ? formatDuration(Math.round(totalTime / stepsVisited)) : "—"}
-              </p>
-              <p className="text-xs text-purple-400 mt-0.5">Avg per step</p>
-            </div>
+        <div style={{ padding: "1.5rem", overflowY: "auto", flex: 1 }}>
+          {/* Summary cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem", marginBottom: "1.5rem" }}>
+            {[
+              { label: "Total time", value: formatDuration(total) },
+              { label: "Steps timed", value: String(entries.length) },
+              { label: "Avg / step", value: entries.length > 0 ? formatDuration(Math.round(total / entries.length)) : "—" },
+            ].map((s) => (
+              <div key={s.label} style={{ background: "linear-gradient(135deg, #f5f3ff, #ede9fe)", borderRadius: "12px", padding: "1rem 0.75rem", textAlign: "center" }}>
+                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#4c1d95" }}>{s.value}</div>
+                <div style={{ fontSize: "0.7rem", color: "#8b5cf6", marginTop: "0.25rem", fontWeight: 500 }}>{s.label}</div>
+              </div>
+            ))}
           </div>
 
           {/* Progress */}
-          <div className="mb-5">
-            <div className="flex justify-between text-xs text-purple-400 mb-1">
+          <div style={{ marginBottom: "1.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "#8b5cf6", marginBottom: "0.5rem", fontWeight: 500 }}>
               <span>Pattern progress</span>
-              <span>{stepsVisited}/{totalSteps} steps visited</span>
+              <span>{entries.length}/{totalSteps} steps visited</span>
             </div>
-            <div className="h-2 bg-purple-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-purple-400 rounded-full"
-                style={{ width: `${totalSteps > 0 ? (stepsVisited / totalSteps) * 100 : 0}%` }}
-              />
+            <div style={{ height: "8px", background: "#ede9fe", borderRadius: "99px", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${totalSteps > 0 ? (entries.length / totalSteps) * 100 : 0}%`, background: "linear-gradient(90deg, #8b5cf6, #7c3aed)", borderRadius: "99px" }} />
             </div>
           </div>
 
-          {/* Slowest steps */}
-          {allEntries.length > 0 && (
+          {entries.length > 0 ? (
             <div>
-              <p className="text-xs font-medium text-purple-500 uppercase tracking-wide mb-3">Time per step</p>
-              <div className="space-y-2">
-                {allEntries.slice(0, 20).map(({ key, label, step, secs }) => (
-                  <div key={key} className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-purple-400 truncate">{label}</p>
-                      <p className="text-sm text-purple-800 font-medium truncate">{step}</p>
+              <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#8b5cf6", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.75rem" }}>Time per step</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {entries.slice(0, 20).map(({ key, label, step, secs }) => (
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "0.72rem", color: "#a78bfa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+                      <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "#4c1d95", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{step}</div>
                     </div>
-                    <div className="flex-shrink-0 text-right">
-                      <span className="text-sm font-mono text-purple-600">{formatDuration(secs)}</span>
-                      {/* Bar */}
-                      <div className="h-1 bg-purple-100 rounded-full mt-1 w-20">
-                        <div
-                          className="h-full bg-purple-400 rounded-full"
-                          style={{ width: `${Math.min(100, (secs / (allEntries[0]?.secs || 1)) * 100)}%` }}
-                        />
+                    <div style={{ flexShrink: 0, textAlign: "right", minWidth: "60px" }}>
+                      <div style={{ fontSize: "0.875rem", fontWeight: 700, color: "#7c3aed", fontFamily: "monospace" }}>{formatDuration(secs)}</div>
+                      <div style={{ height: "4px", background: "#ede9fe", borderRadius: "99px", marginTop: "4px", width: "60px" }}>
+                        <div style={{ height: "100%", width: `${(secs / max) * 100}%`, background: "linear-gradient(90deg, #a78bfa, #7c3aed)", borderRadius: "99px" }} />
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
-
-          {allEntries.length === 0 && (
-            <p className="text-center text-purple-300 text-sm py-8">
-              No timing data yet — start navigating steps to track time
-            </p>
+          ) : (
+            <p style={{ textAlign: "center", color: "#c4b5fd", fontSize: "0.875rem", padding: "2rem 0" }}>No timing data yet — start navigating steps to track time</p>
           )}
         </div>
       </div>

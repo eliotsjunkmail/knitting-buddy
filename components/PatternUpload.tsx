@@ -1,21 +1,12 @@
 "use client";
 import { useState, useRef } from "react";
 
-interface Row {
-  label: string;
-  steps: string[];
-  note?: string;
-}
+interface Row { label: string; steps: string[]; note?: string }
 
-interface Props {
-  onSave: (name: string, rows: Row[], imageData: string) => Promise<void>;
-  onCancel: () => void;
-}
-
-export default function PatternUpload({ onSave, onCancel }: Props) {
+export default function PatternUpload({ onSave, onCancel }: { onSave: (name: string, rows: Row[], imageData: string) => Promise<void>; onCancel: () => void }) {
   const [step, setStep] = useState<"upload" | "review" | "name">("upload");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageData, setImageData] = useState<string>("");
+  const [imageData, setImageData] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [patternName, setPatternName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,256 +14,156 @@ export default function PatternUpload({ onSave, onCancel }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
-    setError("");
-    // Compress image on client side
+    setError(""); setLoading(true); setStep("review");
     const compressed = await compressImage(file, 1200);
-    setImagePreview(compressed.dataUrl);
-
-    // Upload for OCR
-    setLoading(true);
-    setStep("review");
+    setImagePreview(compressed);
     try {
-      const formData = new FormData();
-      // Convert dataUrl back to blob for upload
-      const blob = await fetch(compressed.dataUrl).then((r) => r.blob());
-      formData.append("image", blob, file.name);
-
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const blob = await fetch(compressed).then((r) => r.blob());
+      const fd = new FormData();
+      fd.append("image", blob, file.name);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-
       setRows(data.rows as Row[]);
       setImageData(data.imageData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process image");
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
-  function updateStep(rowIdx: number, stepIdx: number, val: string) {
-    setRows((prev) => {
-      const next = [...prev];
-      next[rowIdx] = { ...next[rowIdx], steps: [...next[rowIdx].steps] };
-      next[rowIdx].steps[stepIdx] = val;
-      return next;
-    });
-  }
-
-  function addStep(rowIdx: number) {
-    setRows((prev) => {
-      const next = [...prev];
-      next[rowIdx] = { ...next[rowIdx], steps: [...next[rowIdx].steps, ""] };
-      return next;
-    });
-  }
-
-  function removeStep(rowIdx: number, stepIdx: number) {
-    setRows((prev) => {
-      const next = [...prev];
-      next[rowIdx] = { ...next[rowIdx], steps: next[rowIdx].steps.filter((_, i) => i !== stepIdx) };
-      return next;
-    });
-  }
-
-  function updateRowLabel(rowIdx: number, label: string) {
-    setRows((prev) => {
-      const next = [...prev];
-      next[rowIdx] = { ...next[rowIdx], label };
-      return next;
-    });
-  }
-
-  function addRow() {
-    setRows((prev) => [...prev, { label: `Row ${prev.length + 1}`, steps: [""] }]);
-  }
-
-  function removeRow(rowIdx: number) {
-    setRows((prev) => prev.filter((_, i) => i !== rowIdx));
-  }
-
-  async function handleSave() {
-    if (!patternName.trim()) return;
-    setLoading(true);
-    try {
-      await onSave(patternName.trim(), rows, imageData);
-    } catch {
-      setError("Failed to save pattern");
-    } finally {
-      setLoading(false);
-    }
+  function updateStep(ri: number, si: number, val: string) {
+    setRows((p) => { const n = [...p]; n[ri] = { ...n[ri], steps: n[ri].steps.map((s, i) => i === si ? val : s) }; return n; });
   }
 
   return (
-    <div className="fixed inset-0 bg-purple-950/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl shadow-purple-200 max-h-[90vh] flex flex-col">
+    <div style={{ position: "fixed", inset: 0, background: "rgba(76,29,149,0.55)", backdropFilter: "blur(6px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "1rem" }}
+      onClick={(e) => e.target === e.currentTarget && onCancel()}>
+      <div style={{ background: "white", width: "100%", maxWidth: "520px", borderRadius: "20px 20px 16px 16px", boxShadow: "0 -8px 40px rgba(0,0,0,0.25)", maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-purple-100">
-          <h2 className="text-lg font-semibold text-purple-900">
-            {step === "upload" ? "Add Pattern" : step === "review" ? "Review Pattern" : "Name Your Pattern"}
-          </h2>
-          <button onClick={onCancel} className="text-purple-300 hover:text-purple-500 text-xl">✕</button>
+        <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid #ede9fe", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "#4c1d95" }}>
+              {step === "upload" ? "Add Pattern" : step === "review" ? "Review Pattern" : "Name Your Pattern"}
+            </h2>
+            <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.5rem" }}>
+              {["upload", "review", "name"].map((s, i) => (
+                <div key={s} style={{ width: "24px", height: "4px", borderRadius: "2px", background: ["upload", "review", "name"].indexOf(step) >= i ? "#7c3aed" : "#ede9fe", transition: "background 0.3s" }} />
+              ))}
+            </div>
+          </div>
+          <button onClick={onCancel} style={{ width: "32px", height: "32px", background: "#f5f3ff", border: "none", borderRadius: "8px", color: "#8b5cf6", cursor: "pointer", fontSize: "1rem" }}>✕</button>
         </div>
 
-        <div className="overflow-y-auto flex-1 p-6">
-          {/* STEP 1: Upload */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem" }}>
+          {/* Upload */}
           {step === "upload" && (
             <div>
-              <div
-                onClick={() => fileRef.current?.click()}
-                className="border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-2xl p-10 text-center cursor-pointer transition-colors bg-purple-50/50 hover:bg-purple-50"
-              >
-                <div className="text-4xl mb-3">📷</div>
-                <p className="text-purple-700 font-medium">Take a photo or upload an image</p>
-                <p className="text-purple-400 text-sm mt-1">JPG, PNG, WebP — Claude will extract the pattern</p>
+              <div onClick={() => fileRef.current?.click()}
+                style={{ border: "2px dashed #c4b5fd", borderRadius: "16px", padding: "3rem 2rem", textAlign: "center", cursor: "pointer", background: "#faf5ff", transition: "all 0.2s" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "#7c3aed"; (e.currentTarget as HTMLDivElement).style.background = "#f5f3ff"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = "#c4b5fd"; (e.currentTarget as HTMLDivElement).style.background = "#faf5ff"; }}>
+                <div style={{ fontSize: "3rem", marginBottom: "0.75rem" }}>📷</div>
+                <p style={{ margin: 0, fontWeight: 600, color: "#4c1d95" }}>Take a photo or upload an image</p>
+                <p style={{ margin: "0.375rem 0 0", fontSize: "0.8rem", color: "#8b5cf6" }}>Claude AI will extract your pattern automatically</p>
               </div>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-              />
-
-              {/* Manual entry option */}
-              <button
-                onClick={() => { setRows([{ label: "Row 1", steps: ["k1"] }]); setStep("review"); }}
-                className="w-full mt-3 py-2.5 text-purple-500 hover:text-purple-700 text-sm border border-purple-200 hover:border-purple-300 rounded-xl transition-colors"
-              >
-                Enter pattern manually
+              <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+              <button onClick={() => { setRows([{ label: "Row 1", steps: ["k1"] }]); setStep("review"); }}
+                style={{ width: "100%", marginTop: "0.875rem", padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontSize: "0.875rem" }}>
+                Enter manually instead
               </button>
             </div>
           )}
 
-          {/* STEP 2: Review & Edit */}
+          {/* Review */}
           {step === "review" && (
             <div>
-              {imagePreview && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={imagePreview} alt="Pattern" className="w-full rounded-xl mb-4 max-h-40 object-cover" />
-              )}
-
+              {imagePreview && <img src={imagePreview} alt="Pattern" style={{ width: "100%", borderRadius: "12px", marginBottom: "1rem", maxHeight: "150px", objectFit: "cover" }} />}
               {loading && (
-                <div className="text-center py-8">
-                  <div className="inline-block w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-3" />
-                  <p className="text-purple-500 text-sm">Analysing pattern with Claude…</p>
+                <div style={{ textAlign: "center", padding: "3rem 0" }}>
+                  <div style={{ width: "40px", height: "40px", border: "4px solid #ede9fe", borderTopColor: "#7c3aed", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 1rem" }} />
+                  <p style={{ color: "#8b5cf6", fontSize: "0.875rem" }}>Claude is reading your pattern…</p>
                 </div>
               )}
-
-              {error && (
-                <p className="text-red-500 text-sm bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-4">{error}</p>
-              )}
-
+              {error && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "0.75rem 1rem", color: "#dc2626", fontSize: "0.875rem", marginBottom: "1rem" }}>{error}</div>}
               {!loading && rows.length > 0 && (
-                <div className="space-y-4">
-                  <p className="text-xs text-purple-400">Review and edit the extracted rows below:</p>
-
-                  {rows.map((row, ri) => (
-                    <div key={ri} className="border border-purple-100 rounded-xl p-3 bg-purple-50/30">
-                      <div className="flex items-center gap-2 mb-2">
-                        <input
-                          value={row.label}
-                          onChange={(e) => updateRowLabel(ri, e.target.value)}
-                          className="font-semibold text-purple-800 text-sm bg-transparent border-b border-purple-200 focus:outline-none focus:border-purple-400 flex-1"
-                        />
-                        <button onClick={() => removeRow(ri)} className="text-purple-300 hover:text-red-400 text-xs">✕</button>
+                <div>
+                  <p style={{ margin: "0 0 1rem", fontSize: "0.8rem", color: "#8b5cf6" }}>Review and edit the extracted steps:</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+                    {rows.map((row, ri) => (
+                      <div key={ri} style={{ border: "1px solid #ede9fe", borderRadius: "12px", padding: "0.875rem", background: "#faf5ff" }}>
+                        <input value={row.label} onChange={(e) => setRows((p) => p.map((r, i) => i === ri ? { ...r, label: e.target.value } : r))}
+                          style={{ display: "block", width: "100%", fontWeight: 700, fontSize: "0.875rem", color: "#4c1d95", background: "transparent", border: "none", borderBottom: "1px solid #ede9fe", outline: "none", marginBottom: "0.75rem", paddingBottom: "0.375rem" }} />
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                          {row.steps.map((s, si) => (
+                            <div key={si} style={{ display: "flex", alignItems: "center", background: "white", border: "1px solid #ddd6fe", borderRadius: "8px", overflow: "hidden" }}>
+                              <input value={s} onChange={(e) => updateStep(ri, si, e.target.value)}
+                                style={{ padding: "0.375rem 0.5rem", fontSize: "0.8rem", fontFamily: "monospace", color: "#4c1d95", border: "none", outline: "none", width: "72px", background: "transparent" }} />
+                              <button onClick={() => setRows((p) => p.map((r, i) => i === ri ? { ...r, steps: r.steps.filter((_, j) => j !== si) } : r))}
+                                style={{ padding: "0.375rem 0.5rem", background: "transparent", border: "none", color: "#c4b5fd", cursor: "pointer", fontSize: "0.8rem" }}>×</button>
+                            </div>
+                          ))}
+                          <button onClick={() => setRows((p) => p.map((r, i) => i === ri ? { ...r, steps: [...r.steps, ""] } : r))}
+                            style={{ padding: "0.375rem 0.75rem", background: "transparent", border: "1px dashed #c4b5fd", borderRadius: "8px", color: "#8b5cf6", cursor: "pointer", fontSize: "0.8rem" }}>+ step</button>
+                        </div>
                       </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {row.steps.map((step, si) => (
-                          <div key={si} className="flex items-center bg-white border border-purple-200 rounded-lg overflow-hidden">
-                            <input
-                              value={step}
-                              onChange={(e) => updateStep(ri, si, e.target.value)}
-                              className="text-xs text-purple-700 px-2 py-1 w-20 focus:outline-none focus:ring-1 focus:ring-purple-300"
-                            />
-                            <button
-                              onClick={() => removeStep(ri, si)}
-                              className="px-1.5 text-purple-200 hover:text-red-400 transition-colors"
-                            >×</button>
-                          </div>
-                        ))}
-                        <button
-                          onClick={() => addStep(ri)}
-                          className="text-xs text-purple-400 hover:text-purple-600 border border-dashed border-purple-200 rounded-lg px-2 py-1"
-                        >+ step</button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <button
-                    onClick={addRow}
-                    className="w-full py-2 text-sm text-purple-400 hover:text-purple-600 border border-dashed border-purple-200 rounded-xl transition-colors"
-                  >+ Add Row</button>
+                    ))}
+                    <button onClick={() => setRows((p) => [...p, { label: `Row ${p.length + 1}`, steps: [""] }])}
+                      style={{ padding: "0.75rem", background: "transparent", border: "1px dashed #c4b5fd", borderRadius: "10px", color: "#8b5cf6", cursor: "pointer", fontSize: "0.875rem" }}>+ Add Row</button>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* STEP 3: Name */}
+          {/* Name */}
           {step === "name" && (
             <div>
-              <label className="block text-sm font-medium text-purple-800 mb-2">Pattern name</label>
-              <input
-                type="text"
-                value={patternName}
-                onChange={(e) => setPatternName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
-                placeholder="e.g. Cosy Winter Scarf"
-                autoFocus
-                className="w-full px-4 py-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400 text-purple-900 placeholder-purple-200"
-              />
-              <p className="text-xs text-purple-400 mt-2">{rows.length} row{rows.length !== 1 ? "s" : ""} detected</p>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#6d28d9", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>Pattern Name</label>
+              <input type="text" value={patternName} onChange={(e) => setPatternName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && patternName.trim()) onSave(patternName.trim(), rows, imageData); }}
+                placeholder="e.g. Cosy Winter Scarf" autoFocus
+                style={{ width: "100%", padding: "0.875rem 1rem", border: "2px solid #ede9fe", borderRadius: "12px", fontSize: "1rem", color: "#1e1b4b", outline: "none", background: "#faf5ff" }}
+                onFocus={(e) => e.target.style.borderColor = "#7c3aed"}
+                onBlur={(e) => e.target.style.borderColor = "#ede9fe"} />
+              <p style={{ margin: "0.5rem 0 0", fontSize: "0.8rem", color: "#a78bfa" }}>{rows.length} row{rows.length !== 1 ? "s" : ""} · {rows.reduce((s, r) => s + r.steps.length, 0)} steps total</p>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-purple-100 flex gap-3">
+        <div style={{ padding: "1rem 1.5rem", borderTop: "1px solid #ede9fe", display: "flex", gap: "0.75rem" }}>
           {step === "review" && !loading && rows.length > 0 && (
             <>
-              <button onClick={onCancel} className="flex-1 py-2.5 border border-purple-200 text-purple-500 rounded-xl text-sm hover:bg-purple-50 transition-colors">Cancel</button>
-              <button
-                onClick={() => setStep("name")}
-                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-medium transition-colors"
-              >
-                Next →
-              </button>
+              <button onClick={onCancel} style={{ flex: 1, padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontWeight: 600 }}>Cancel</button>
+              <button onClick={() => setStep("name")} style={{ flex: 1, padding: "0.75rem", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, boxShadow: "0 4px 12px rgba(124,58,237,0.3)" }}>Next →</button>
             </>
           )}
           {step === "name" && (
             <>
-              <button onClick={() => setStep("review")} className="flex-1 py-2.5 border border-purple-200 text-purple-500 rounded-xl text-sm hover:bg-purple-50 transition-colors">← Back</button>
-              <button
-                onClick={handleSave}
-                disabled={!patternName.trim() || loading}
-                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
-              >
+              <button onClick={() => setStep("review")} style={{ flex: 1, padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontWeight: 600 }}>← Back</button>
+              <button onClick={() => onSave(patternName.trim(), rows, imageData)} disabled={!patternName.trim() || loading}
+                style={{ flex: 1, padding: "0.75rem", background: !patternName.trim() ? "#c4b5fd" : "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "10px", cursor: !patternName.trim() ? "not-allowed" : "pointer", fontWeight: 700, boxShadow: patternName.trim() ? "0 4px 12px rgba(124,58,237,0.3)" : "none" }}>
                 {loading ? "Saving…" : "Save Pattern"}
               </button>
             </>
           )}
         </div>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
-async function compressImage(file: File, maxWidth: number): Promise<{ dataUrl: string }> {
+async function compressImage(file: File, maxWidth: number): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       const scale = Math.min(1, maxWidth / img.width);
       const canvas = document.createElement("canvas");
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.width = img.width * scale; canvas.height = img.height * scale;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
-      resolve({ dataUrl: canvas.toDataURL("image/jpeg", 0.85) });
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
     };
     img.src = url;
   });
