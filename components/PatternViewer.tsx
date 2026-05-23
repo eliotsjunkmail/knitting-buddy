@@ -2,7 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { stepKey, formatDuration } from "@/lib/utils";
 import StatsPanel from "@/components/StatsPanel";
-import PatternPreview from "@/components/PatternPreview";
+import PatternVisualPreview from "@/components/PatternVisualPreview";
 
 interface Row { label: string; steps: string[]; note?: string }
 interface Progress { currentRow: number; currentStep: number; lastUsed: string; timePerStep: Record<string, number> }
@@ -270,7 +270,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
       </div>
 
       {showStats && <StatsPanel rows={rows} timePerStep={timePerStep} onClose={() => setShowStats(false)} />}
-      {showPreview && <PatternPreview rows={rows} onClose={() => setShowPreview(false)} />}
+      {showPreview && <PatternVisualPreview rows={rows} name={pattern.name} onClose={() => setShowPreview(false)} />}
 
       {showImage && pattern.imageData && (
         <div onClick={() => setShowImage(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>

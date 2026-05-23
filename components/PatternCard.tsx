@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@/lib/utils";
-import PatternPreview from "@/components/PatternPreview";
+import PatternVisualPreview from "@/components/PatternVisualPreview";
 
 interface Row { label: string; steps: string[] }
 interface Progress { currentRow: number; currentStep: number; lastUsed: string }
@@ -73,7 +73,7 @@ export default function PatternCard({ pattern, onDelete }: { pattern: Pattern; o
         </div>
       </div>
 
-      {showPreview && <PatternPreview rows={rows} onClose={() => setShowPreview(false)} />}
+      {showPreview && <PatternVisualPreview rows={rows} name={pattern.name} onClose={() => setShowPreview(false)} />}
     </div>
   );
 }
