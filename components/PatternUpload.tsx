@@ -79,6 +79,10 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
           <button onClick={onCancel} style={{ width: "32px", height: "32px", background: "#f5f3ff", border: "none", borderRadius: "8px", color: "#8b5cf6", cursor: "pointer", fontSize: "1rem" }}>✕</button>
         </div>
 
+        {/* Always-mounted file inputs */}
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+        <input ref={addPageRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddPage(f); e.target.value = ""; }} />
+
         <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem" }}>
           {/* Upload */}
           {step === "upload" && (
@@ -91,8 +95,6 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
                 <p style={{ margin: 0, fontWeight: 600, color: "#4c1d95" }}>Take a photo or upload an image</p>
                 <p style={{ margin: "0.375rem 0 0", fontSize: "0.8rem", color: "#8b5cf6" }}>Claude AI will extract your pattern automatically</p>
               </div>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
-              <input ref={addPageRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddPage(f); e.target.value = ""; }} />
               <button onClick={() => { setRows([{ label: "Row 1", steps: ["k1"] }]); setStep("review"); }}
                 style={{ width: "100%", marginTop: "0.875rem", padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontSize: "0.875rem" }}>
                 Enter manually instead
@@ -167,10 +169,16 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
 
         {/* Footer */}
         <div style={{ padding: "1rem 1.5rem", borderTop: "1px solid #ede9fe", display: "flex", gap: "0.75rem" }}>
-          {step === "review" && !loading && rows.length > 0 && (
+          {step === "review" && rows.length > 0 && (
             <>
-              <button onClick={() => addPageRef.current?.click()} style={{ flex: 1, padding: "0.75rem", background: "transparent", color: "#7c3aed", border: "2px dashed #c4b5fd", borderRadius: "10px", cursor: "pointer", fontWeight: 600, fontSize: "0.85rem" }}>+ Add Page</button>
-              <button onClick={() => setStep("name")} style={{ flex: 1, padding: "0.75rem", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, boxShadow: "0 4px 12px rgba(124,58,237,0.3)" }}>Next →</button>
+              <button onClick={() => !loading && addPageRef.current?.click()} disabled={loading}
+                style={{ flex: 1, padding: "0.75rem", background: "transparent", color: loading ? "#c4b5fd" : "#7c3aed", border: `2px dashed ${loading ? "#ede9fe" : "#c4b5fd"}`, borderRadius: "10px", cursor: loading ? "not-allowed" : "pointer", fontWeight: 600, fontSize: "0.85rem" }}>
+                {loading ? "Processing…" : "+ Add Page"}
+              </button>
+              <button onClick={() => !loading && setStep("name")} disabled={loading}
+                style={{ flex: 1, padding: "0.75rem", background: loading ? "#c4b5fd" : "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "10px", cursor: loading ? "not-allowed" : "pointer", fontWeight: 700, boxShadow: loading ? "none" : "0 4px 12px rgba(124,58,237,0.3)" }}>
+                Next →
+              </button>
             </>
           )}
           {step === "name" && (
