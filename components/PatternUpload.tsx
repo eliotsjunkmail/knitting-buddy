@@ -13,20 +13,24 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
   const [patternName, setPatternName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [pageCount, setPageCount] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const addPageRef = useRef<HTMLInputElement>(null);
 
   function retryUpload() {
     setStep("upload");
     setError("");
     setImagePreview(null);
     setRows([]);
+    setPageCount(0);
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  async function handleFile(file: File) {
-    setError(""); setLoading(true); setStep("review");
+  async function processImage(file: File, append: boolean) {
+    setError(""); setLoading(true);
+    if (!append) setStep("review");
     const compressed = await compressImage(file, 1200);
-    setImagePreview(compressed);
+    if (!append) setImagePreview(compressed);
     try {
       const blob = dataURLToBlob(compressed);
       const fd = new FormData();
@@ -35,13 +39,22 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
       const data = await res.json();
       if (res.status === 401) { router.push("/"); return; }
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      setRows(data.rows as Row[]);
-      setImageData(data.imageData);
-      if (data.name) setPatternName(data.name);
+      if (append) {
+        setRows((prev) => [...prev, ...(data.rows as Row[])]);
+        setPageCount((n) => n + 1);
+      } else {
+        setRows(data.rows as Row[]);
+        setImageData(data.imageData);
+        if (data.name) setPatternName(data.name);
+        setPageCount(1);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process image");
     } finally { setLoading(false); }
   }
+
+  function handleFile(file: File) { processImage(file, false); }
+  function handleAddPage(file: File) { processImage(file, true); }
 
   function updateStep(ri: number, si: number, val: string) {
     setRows((p) => { const n = [...p]; n[ri] = { ...n[ri], steps: n[ri].steps.map((s, i) => i === si ? val : s) }; return n; });
@@ -78,7 +91,8 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
                 <p style={{ margin: 0, fontWeight: 600, color: "#4c1d95" }}>Take a photo or upload an image</p>
                 <p style={{ margin: "0.375rem 0 0", fontSize: "0.8rem", color: "#8b5cf6" }}>Claude AI will extract your pattern automatically</p>
               </div>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+              <input ref={addPageRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAddPage(f); e.target.value = ""; }} />
               <button onClick={() => { setRows([{ label: "Row 1", steps: ["k1"] }]); setStep("review"); }}
                 style={{ width: "100%", marginTop: "0.875rem", padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontSize: "0.875rem" }}>
                 Enter manually instead
@@ -107,7 +121,10 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
               )}
               {!loading && rows.length > 0 && (
                 <div>
-                  <p style={{ margin: "0 0 1rem", fontSize: "0.8rem", color: "#8b5cf6" }}>Review and edit the extracted steps:</p>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                    <p style={{ margin: 0, fontSize: "0.8rem", color: "#8b5cf6" }}>Review and edit the extracted steps:</p>
+                    {pageCount > 0 && <span style={{ fontSize: "0.75rem", background: "#f5f3ff", color: "#7c3aed", border: "1px solid #ddd6fe", borderRadius: "99px", padding: "0.2rem 0.6rem", fontWeight: 600 }}>{pageCount} page{pageCount !== 1 ? "s" : ""}</span>}
+                  </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
                     {rows.map((row, ri) => (
                       <div key={ri} style={{ border: "1px solid #ede9fe", borderRadius: "12px", padding: "0.875rem", background: "#faf5ff" }}>
@@ -152,7 +169,7 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
         <div style={{ padding: "1rem 1.5rem", borderTop: "1px solid #ede9fe", display: "flex", gap: "0.75rem" }}>
           {step === "review" && !loading && rows.length > 0 && (
             <>
-              <button onClick={onCancel} style={{ flex: 1, padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontWeight: 600 }}>Cancel</button>
+              <button onClick={() => addPageRef.current?.click()} style={{ flex: 1, padding: "0.75rem", background: "transparent", color: "#7c3aed", border: "2px dashed #c4b5fd", borderRadius: "10px", cursor: "pointer", fontWeight: 600, fontSize: "0.85rem" }}>+ Add Page</button>
               <button onClick={() => setStep("name")} style={{ flex: 1, padding: "0.75rem", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, boxShadow: "0 4px 12px rgba(124,58,237,0.3)" }}>Next →</button>
             </>
           )}

@@ -2,6 +2,6 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npx prisma db push && HOSTNAME=0.0.0.0 node .next/standalone/server.js"
+startCommand = "npx prisma db push && node seed.mjs && HOSTNAME=0.0.0.0 node .next/standalone/server.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
