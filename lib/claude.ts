@@ -12,7 +12,7 @@ export interface PatternRow {
 
 export async function parsePatternFromImage(base64Image: string, mediaType: string): Promise<PatternRow[]> {
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: "claude-sonnet-4-6",
     max_tokens: 4096,
     messages: [
       {

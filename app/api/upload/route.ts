@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { parsePatternFromImage } from "@/lib/claude";
 
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const auth = await getAuthUser();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
