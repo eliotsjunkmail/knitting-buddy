@@ -8,11 +8,13 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { id: auth.userId },
-    select: { id: true, username: true, isGuest: true },
+    select: { id: true, username: true },
   });
   if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({ user });
+  return NextResponse.json({
+    user: { ...user, isGuest: user.username.startsWith("guest_") },
+  });
 }
 
 export async function DELETE() {

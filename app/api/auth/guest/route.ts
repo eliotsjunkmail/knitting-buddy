@@ -10,7 +10,7 @@ export async function POST() {
     const password = await bcrypt.hash(Math.random().toString(36), 10);
 
     const user = await prisma.user.create({
-      data: { username, password, isGuest: true },
+      data: { username, password },
     });
 
     const token = await signToken(user.id);
