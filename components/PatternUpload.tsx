@@ -117,12 +117,8 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
                             <div key={si} style={{ display: "flex", alignItems: "center", background: "white", border: "1px solid #ddd6fe", borderRadius: "8px", overflow: "hidden" }}>
                               <input value={s} onChange={(e) => updateStep(ri, si, e.target.value)}
                                 style={{ padding: "0.375rem 0.5rem", fontSize: "0.8rem", fontFamily: "monospace", color: "#4c1d95", border: "none", outline: "none", width: "72px", background: "transparent" }} />
-                              <button onClick={() => setRows((p) => p.map((r, i) => i === ri ? { ...r, steps: r.steps.filter((_, j) => j !== si) } : r))}
-                                style={{ padding: "0.375rem 0.5rem", background: "transparent", border: "none", color: "#c4b5fd", cursor: "pointer", fontSize: "0.8rem" }}>×</button>
                             </div>
                           ))}
-                          <button onClick={() => setRows((p) => p.map((r, i) => i === ri ? { ...r, steps: [...r.steps, ""] } : r))}
-                            style={{ padding: "0.375rem 0.75rem", background: "transparent", border: "1px dashed #c4b5fd", borderRadius: "8px", color: "#8b5cf6", cursor: "pointer", fontSize: "0.8rem" }}>+ step</button>
                         </div>
                       </div>
                     ))}
@@ -137,6 +133,7 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
           {/* Name */}
           {step === "name" && (
             <div>
+              {error && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "0.75rem 1rem", color: "#dc2626", fontSize: "0.875rem", marginBottom: "1rem" }}>{error}</div>}
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#6d28d9", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>Pattern Name</label>
               <input type="text" value={patternName} onChange={(e) => setPatternName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && patternName.trim()) onSave(patternName.trim(), rows, imageData); }}
                 placeholder="e.g. Cosy Winter Scarf" autoFocus
@@ -158,9 +155,15 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
           )}
           {step === "name" && (
             <>
-              <button onClick={() => setStep("review")} style={{ flex: 1, padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontWeight: 600 }}>← Back</button>
-              <button onClick={() => onSave(patternName.trim(), rows, imageData)} disabled={!patternName.trim() || loading}
-                style={{ flex: 1, padding: "0.75rem", background: !patternName.trim() ? "#c4b5fd" : "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "10px", cursor: !patternName.trim() ? "not-allowed" : "pointer", fontWeight: 700, boxShadow: patternName.trim() ? "0 4px 12px rgba(124,58,237,0.3)" : "none" }}>
+              <button onClick={() => setStep("review")} disabled={loading} style={{ flex: 1, padding: "0.75rem", background: "transparent", color: "#8b5cf6", border: "1px solid #ede9fe", borderRadius: "10px", cursor: "pointer", fontWeight: 600 }}>← Back</button>
+              <button
+                onClick={async () => {
+                  setError(""); setLoading(true);
+                  try { await onSave(patternName.trim(), rows, imageData); }
+                  catch (err) { setError(err instanceof Error ? err.message : "Failed to save"); setLoading(false); }
+                }}
+                disabled={!patternName.trim() || loading}
+                style={{ flex: 1, padding: "0.75rem", background: !patternName.trim() || loading ? "#c4b5fd" : "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "10px", cursor: !patternName.trim() || loading ? "not-allowed" : "pointer", fontWeight: 700, boxShadow: patternName.trim() && !loading ? "0 4px 12px rgba(124,58,237,0.3)" : "none" }}>
                 {loading ? "Saving…" : "Save Pattern"}
               </button>
             </>
