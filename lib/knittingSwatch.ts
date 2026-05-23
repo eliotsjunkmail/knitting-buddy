@@ -3,14 +3,15 @@
 
 export type Stitch = "knit" | "purl" | "yo" | "decrease" | "cable-hi" | "cable-lo" | "slip";
 
-export const PALETTE: Record<Stitch, { bg: number; mark: number }> = {
-  "knit":      { bg: 215, mark: 148 },
-  "purl":      { bg: 155, mark: 105 },
-  "yo":        { bg: 246, mark: 195 },
-  "decrease":  { bg: 132, mark:  78 },
-  "cable-hi":  { bg: 234, mark: 170 },
-  "cable-lo":  { bg: 108, mark:  68 },
-  "slip":      { bg: 192, mark: 142 },
+// Purple-and-gray palette  bg/mark = [R, G, B]
+export const PALETTE: Record<Stitch, { bg: [number,number,number]; mark: [number,number,number] }> = {
+  "knit":      { bg: [178, 162, 212], mark: [108,  88, 155] }, // lavender
+  "purl":      { bg: [148, 142, 162], mark: [ 96,  90, 112] }, // warm gray
+  "yo":        { bg: [232, 225, 245], mark: [175, 162, 205] }, // near-white lavender
+  "decrease":  { bg: [100,  80, 145], mark: [ 65,  50, 110] }, // deep purple
+  "cable-hi":  { bg: [210, 198, 238], mark: [145, 128, 188] }, // pale lavender (highlight)
+  "cable-lo":  { bg: [ 82,  65, 122], mark: [ 52,  40,  90] }, // deep purple (shadow)
+  "slip":      { bg: [158, 150, 178], mark: [108, 100, 128] }, // gray-purple
 };
 
 // ── Step parser ───────────────────────────────────────────────────────────────
@@ -121,6 +122,8 @@ export function expandSteps(steps: string[]): Stitch[] {
   return out.length > 0 ? out : ["knit" as Stitch];
 }
 
+function clamp(v: number) { return Math.max(0, Math.min(255, Math.round(v))); }
+
 // ── Canvas renderer ───────────────────────────────────────────────────────────
 export function renderSwatch(canvas: HTMLCanvasElement, grid: Stitch[][]): void {
   const rowCount = Math.min(grid.length, 80);
@@ -133,13 +136,14 @@ export function renderSwatch(canvas: HTMLCanvasElement, grid: Stitch[][]): void 
   canvas.height = CH * rowCount;
 
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#e4e4e4";
+  ctx.fillStyle = "#2d1f4e";  // dark purple canvas background
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const lw = Math.max(0.8, CW * 0.09);
 
   for (let r = 0; r < rowCount; r++) {
-    const row = grid[r];
+    // Draw rows flipped: last pattern row at top of canvas (finished-fabric orientation)
+    const row = grid[rowCount - 1 - r];
     const cols = Math.min(row.length, maxCols);
     const xOff = Math.floor((canvas.width - cols * CW) / 2);
 
@@ -149,13 +153,14 @@ export function renderSwatch(canvas: HTMLCanvasElement, grid: Stitch[][]): void 
       const x = xOff + c * CW;
       const y = r * CH;
 
+      // Per-stitch brightness jitter ±4 applied to each RGB channel
       const j = (Math.sin(r * 6.7 + c * 3.3) * 0.5 + 0.5) * 8 - 4;
-      const bg = Math.max(0, Math.min(255, Math.round(pal.bg + j)));
-      ctx.fillStyle = `rgb(${bg},${bg},${bg})`;
+      const [br, bg2, bb] = pal.bg;
+      ctx.fillStyle = `rgb(${clamp(br+j)},${clamp(bg2+j)},${clamp(bb+j)})`;
       ctx.fillRect(x, y, CW, CH);
 
-      const mk = pal.mark;
-      ctx.strokeStyle = `rgb(${mk},${mk},${mk})`;
+      const [mr, mg, mb] = pal.mark;
+      ctx.strokeStyle = `rgb(${mr},${mg},${mb})`;
       ctx.lineWidth = lw;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";

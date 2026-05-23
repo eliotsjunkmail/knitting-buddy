@@ -1,9 +1,8 @@
 "use client";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@/lib/utils";
 import { expandSteps, renderSwatch } from "@/lib/knittingSwatch";
-import PatternVisualPreview from "@/components/PatternVisualPreview";
 
 interface Row { label: string; steps: string[] }
 interface Progress { currentRow: number; currentStep: number; lastUsed: string }
@@ -12,7 +11,6 @@ interface Pattern { id: string; name: string; rows: Row[]; imageData?: string | 
 export default function PatternCard({ pattern, onDelete }: { pattern: Pattern; onDelete: (id: string) => void }) {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [showPreview, setShowPreview] = useState(false);
 
   const rows = pattern.rows as Row[];
   const progress = pattern.progress;
@@ -75,11 +73,6 @@ export default function PatternCard({ pattern, onDelete }: { pattern: Pattern; o
             Continue →
           </button>
           <button
-            onClick={() => setShowPreview(true)}
-            style={{ flex: 1, padding: "0.625rem", background: "#f5f3ff", color: "#7c3aed", border: "1px solid #ddd6fe", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer" }}>
-            Preview
-          </button>
-          <button
             onClick={() => { if (confirm(`Delete "${pattern.name}"?`)) onDelete(pattern.id); }}
             style={{ flex: 1, padding: "0.625rem", background: "transparent", color: "#c4b5fd", border: "1px solid #ede9fe", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer" }}
             onMouseEnter={(e) => { const b = e.currentTarget as HTMLButtonElement; b.style.background = "#fef2f2"; b.style.color = "#dc2626"; b.style.borderColor = "#fecaca"; }}
@@ -89,7 +82,6 @@ export default function PatternCard({ pattern, onDelete }: { pattern: Pattern; o
         </div>
       </div>
 
-      {showPreview && <PatternVisualPreview rows={rows} name={pattern.name} onClose={() => setShowPreview(false)} />}
     </div>
   );
 }
