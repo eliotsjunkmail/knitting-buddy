@@ -2,6 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { stepKey, formatDuration } from "@/lib/utils";
 import StatsPanel from "@/components/StatsPanel";
+import PatternPreview from "@/components/PatternPreview";
 
 interface Row { label: string; steps: string[]; note?: string }
 interface Progress { currentRow: number; currentStep: number; lastUsed: string; timePerStep: Record<string, number> }
@@ -18,6 +19,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const [timePerStep, setTimePerStep] = useState<Record<string, number>>((init?.timePerStep as Record<string, number>) ?? {});
   const [showStats, setShowStats] = useState(false);
   const [showImage, setShowImage] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [stepTimer, setStepTimer] = useState(0);
   const [micActive, setMicActive] = useState(false);
@@ -174,6 +176,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
             {pattern.imageData && (
               <button onClick={() => setShowImage(true)} style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer" }}>📷</button>
             )}
+            <button onClick={() => setShowPreview(true)} style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer" }}>🗺️</button>
             <button onClick={() => setShowStats(true)} style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer" }}>📊</button>
           </div>
         </div>
@@ -267,6 +270,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
       </div>
 
       {showStats && <StatsPanel rows={rows} timePerStep={timePerStep} onClose={() => setShowStats(false)} />}
+      {showPreview && <PatternPreview rows={rows} onClose={() => setShowPreview(false)} />}
 
       {showImage && pattern.imageData && (
         <div onClick={() => setShowImage(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>

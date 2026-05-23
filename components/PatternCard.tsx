@@ -1,6 +1,8 @@
 "use client";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@/lib/utils";
+import PatternPreview from "@/components/PatternPreview";
 
 interface Row { label: string; steps: string[] }
 interface Progress { currentRow: number; currentStep: number; lastUsed: string }
@@ -8,6 +10,7 @@ interface Pattern { id: string; name: string; rows: Row[]; imageData?: string | 
 
 export default function PatternCard({ pattern, onDelete }: { pattern: Pattern; onDelete: (id: string) => void }) {
   const router = useRouter();
+  const [showPreview, setShowPreview] = useState(false);
   const rows = pattern.rows as Row[];
   const progress = pattern.progress;
   const currentRow = progress?.currentRow ?? 0;
@@ -56,14 +59,21 @@ export default function PatternCard({ pattern, onDelete }: { pattern: Pattern; o
             style={{ flex: 1, padding: "0.625rem", background: "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 8px rgba(124,58,237,0.3)" }}>
             Continue →
           </button>
+          <button onClick={() => setShowPreview(true)}
+            style={{ padding: "0.625rem 0.75rem", background: "#f5f3ff", color: "#7c3aed", border: "1px solid #ddd6fe", borderRadius: "8px", fontSize: "0.875rem", cursor: "pointer" }}
+            title="Preview chart">
+            🗺️
+          </button>
           <button onClick={() => { if (confirm(`Delete "${pattern.name}"?`)) onDelete(pattern.id); }}
-            style={{ padding: "0.625rem 0.875rem", background: "transparent", color: "#c4b5fd", border: "1px solid #ede9fe", borderRadius: "8px", fontSize: "0.875rem", cursor: "pointer" }}
+            style={{ padding: "0.625rem 0.75rem", background: "transparent", color: "#c4b5fd", border: "1px solid #ede9fe", borderRadius: "8px", fontSize: "0.875rem", cursor: "pointer" }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#fef2f2"; (e.currentTarget as HTMLButtonElement).style.color = "#dc2626"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#fecaca"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "#c4b5fd"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#ede9fe"; }}>
             ✕
           </button>
         </div>
       </div>
+
+      {showPreview && <PatternPreview rows={rows} onClose={() => setShowPreview(false)} />}
     </div>
   );
 }
