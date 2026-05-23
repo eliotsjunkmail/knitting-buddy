@@ -18,8 +18,8 @@ export async function POST(req: NextRequest) {
     const base64 = buffer.toString("base64");
     const mediaType = file.type || "image/jpeg";
 
-    const rows = await parsePatternFromImage(base64, mediaType);
-    return NextResponse.json({ rows, imageData: `data:${mediaType};base64,${base64}` });
+    const { name, rows } = await parsePatternFromImage(base64, mediaType);
+    return NextResponse.json({ name, rows, imageData: `data:${mediaType};base64,${base64}` });
   } catch (err) {
     console.error("Upload error:", err);
     const msg = err instanceof Error ? err.message : "Unknown error";

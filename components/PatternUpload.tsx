@@ -37,6 +37,7 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setRows(data.rows as Row[]);
       setImageData(data.imageData);
+      if (data.name) setPatternName(data.name);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process image");
     } finally { setLoading(false); }
@@ -47,7 +48,7 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(76,29,149,0.55)", backdropFilter: "blur(6px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "1rem" }}
+    <div style={{ position: "fixed", inset: 0, background: "rgba(76,29,149,0.55)", backdropFilter: "blur(6px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "1rem", paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
       onClick={(e) => e.target === e.currentTarget && onCancel()}>
       <div style={{ background: "white", width: "100%", maxWidth: "520px", borderRadius: "20px 20px 16px 16px", boxShadow: "0 -8px 40px rgba(0,0,0,0.25)", maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
         {/* Header */}
