@@ -3,15 +3,15 @@
 
 export type Stitch = "knit" | "purl" | "yo" | "decrease" | "cable-hi" | "cable-lo" | "slip";
 
-// Purple-and-gray palette  bg/mark = [R, G, B]
+// Blue-and-white palette  bg/mark = [R, G, B]
 export const PALETTE: Record<Stitch, { bg: [number,number,number]; mark: [number,number,number] }> = {
-  "knit":      { bg: [178, 162, 212], mark: [108,  88, 155] }, // lavender
-  "purl":      { bg: [148, 142, 162], mark: [ 96,  90, 112] }, // warm gray
-  "yo":        { bg: [232, 225, 245], mark: [175, 162, 205] }, // near-white lavender
-  "decrease":  { bg: [100,  80, 145], mark: [ 65,  50, 110] }, // deep purple
-  "cable-hi":  { bg: [210, 198, 238], mark: [145, 128, 188] }, // pale lavender (highlight)
-  "cable-lo":  { bg: [ 82,  65, 122], mark: [ 52,  40,  90] }, // deep purple (shadow)
-  "slip":      { bg: [158, 150, 178], mark: [108, 100, 128] }, // gray-purple
+  "knit":      { bg: [100, 149, 220], mark: [ 45,  90, 175] }, // medium blue, V-shape
+  "purl":      { bg: [180, 205, 235], mark: [110, 145, 200] }, // light blue-gray, ridge arc
+  "yo":        { bg: [240, 246, 255], mark: [175, 200, 235] }, // near-white, open ring
+  "decrease":  { bg: [ 50,  90, 170], mark: [ 25,  55, 135] }, // deep blue, diagonal
+  "cable-hi":  { bg: [215, 230, 250], mark: [130, 165, 220] }, // pale blue (highlight)
+  "cable-lo":  { bg: [ 40,  75, 155], mark: [ 20,  45, 120] }, // deep blue (shadow)
+  "slip":      { bg: [145, 175, 220], mark: [ 90, 125, 185] }, // mid-blue, bar
 };
 
 // ── Step parser ───────────────────────────────────────────────────────────────
@@ -81,7 +81,6 @@ export function expandSteps(steps: string[]): Stitch[] {
     const s = raw.toLowerCase().replace(/\s+/g, "").trim();
     if (!s) continue;
 
-    // "rep * N times" / "rep from * N times" / "×N"
     const repN = s.match(/rep(?:eat)?(?:from)?\*?(\d+)(?:more)?times?/i)
               || s.match(/repfrom\*(\d+)/i)
               || s.match(/\*\s*(\d+)\s*times?/i)
@@ -94,7 +93,6 @@ export function expandSteps(steps: string[]): Stitch[] {
       continue;
     }
 
-    // "rep from * to end" — tile the anchored segment to fill the row
     if (/rep.*\*.*end|repfrom\*toend|reptoend|rep.*toend/.test(s) && anchor >= 0) {
       const seg = out.slice(anchor);
       if (seg.length > 0) {
@@ -106,10 +104,8 @@ export function expandSteps(steps: string[]): Stitch[] {
       continue;
     }
 
-    // Standalone * = start of repeat region
     if (s === "*" || s === "**") { anchor = out.length; continue; }
 
-    // Step starting with * — marks anchor then processes the stitch
     let stepStr = s;
     if (s.startsWith("*") && s.length > 1 && !s.includes("rep")) {
       anchor = out.length;
@@ -122,99 +118,179 @@ export function expandSteps(steps: string[]): Stitch[] {
   return out.length > 0 ? out : ["knit" as Stitch];
 }
 
+// ── Cell drawing (shared by static and animated renderers) ────────────────────
 function clamp(v: number) { return Math.max(0, Math.min(255, Math.round(v))); }
 
-// ── Canvas renderer ───────────────────────────────────────────────────────────
-export function renderSwatch(canvas: HTMLCanvasElement, grid: Stitch[][]): void {
+function drawCell(
+  ctx: CanvasRenderingContext2D,
+  stitch: Stitch,
+  x: number, y: number,
+  CW: number, CH: number,
+  lw: number,
+  r: number, c: number,   // for jitter seed
+) {
+  const pal = PALETTE[stitch] ?? PALETTE.knit;
+
+  // Per-stitch brightness jitter ±4
+  const j = (Math.sin(r * 6.7 + c * 3.3) * 0.5 + 0.5) * 8 - 4;
+  const [br, bg, bb] = pal.bg;
+  ctx.fillStyle = `rgb(${clamp(br+j)},${clamp(bg+j)},${clamp(bb+j)})`;
+  ctx.fillRect(x, y, CW, CH);
+
+  const [mr, mg, mb] = pal.mark;
+  ctx.strokeStyle = `rgb(${mr},${mg},${mb})`;
+  ctx.lineWidth = lw;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  switch (stitch) {
+    case "knit":
+      ctx.beginPath();
+      ctx.moveTo(x + CW * 0.12, y + CH * 0.17);
+      ctx.lineTo(x + CW * 0.50, y + CH * 0.83);
+      ctx.lineTo(x + CW * 0.88, y + CH * 0.17);
+      ctx.stroke();
+      break;
+    case "purl":
+      ctx.beginPath();
+      ctx.arc(x + CW * 0.50, y + CH * 0.42, CW * 0.30, Math.PI, 0, false);
+      ctx.stroke();
+      break;
+    case "yo":
+      ctx.beginPath();
+      ctx.arc(x + CW * 0.50, y + CH * 0.50, CW * 0.24, 0, Math.PI * 2);
+      ctx.globalAlpha = 0.55;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      break;
+    case "decrease":
+      ctx.beginPath();
+      ctx.moveTo(x + CW * 0.72, y + CH * 0.14);
+      ctx.lineTo(x + CW * 0.20, y + CH * 0.86);
+      ctx.stroke();
+      break;
+    case "cable-hi":
+      ctx.beginPath();
+      ctx.moveTo(x,      y + CH * 0.62);
+      ctx.bezierCurveTo(x + CW * 0.33, y + CH * 0.14, x + CW * 0.67, y + CH * 0.14, x + CW, y + CH * 0.62);
+      ctx.stroke();
+      break;
+    case "cable-lo":
+      ctx.beginPath();
+      ctx.moveTo(x,      y + CH * 0.38);
+      ctx.bezierCurveTo(x + CW * 0.33, y + CH * 0.86, x + CW * 0.67, y + CH * 0.86, x + CW, y + CH * 0.38);
+      ctx.stroke();
+      break;
+    case "slip":
+      ctx.beginPath();
+      ctx.moveTo(x + CW * 0.50, y + CH * 0.10);
+      ctx.lineTo(x + CW * 0.50, y + CH * 0.90);
+      ctx.stroke();
+      break;
+  }
+
+  // Hairline row divider
+  ctx.fillStyle = "rgba(0,0,0,0.04)";
+  ctx.fillRect(x, y + CH - 1, CW, 1);
+}
+
+// ── Layout helper (shared setup) ─────────────────────────────────────────────
+interface SwatchLayout {
+  ctx: CanvasRenderingContext2D;
+  rowCount: number;
+  maxCols: number;
+  CW: number;
+  CH: number;
+  lw: number;
+  cells: Array<{ stitch: Stitch; x: number; y: number; r: number; c: number }>;
+}
+
+function buildLayout(canvas: HTMLCanvasElement, grid: Stitch[][]): SwatchLayout | null {
   const rowCount = Math.min(grid.length, 80);
-  if (!rowCount) return;
+  if (!rowCount) return null;
   const maxCols = Math.min(Math.max(...grid.slice(0, rowCount).map(r => r.length)), 80);
-  if (!maxCols) return;
+  if (!maxCols) return null;
 
   const CW = Math.max(5, Math.floor(canvas.width / maxCols));
   const CH = Math.round(CW * 0.72);
   canvas.height = CH * rowCount;
 
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#2d1f4e";  // dark purple canvas background
+  // White background
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const lw = Math.max(0.8, CW * 0.09);
 
+  // Pre-build flat ordered cell list (rows flipped: last pattern row at top)
+  const cells: SwatchLayout["cells"] = [];
   for (let r = 0; r < rowCount; r++) {
-    // Draw rows flipped: last pattern row at top of canvas (finished-fabric orientation)
     const row = grid[rowCount - 1 - r];
     const cols = Math.min(row.length, maxCols);
     const xOff = Math.floor((canvas.width - cols * CW) / 2);
-
     for (let c = 0; c < cols; c++) {
-      const stitch = row[c] ?? "knit";
-      const pal = PALETTE[stitch] ?? PALETTE.knit;
-      const x = xOff + c * CW;
-      const y = r * CH;
-
-      // Per-stitch brightness jitter ±4 applied to each RGB channel
-      const j = (Math.sin(r * 6.7 + c * 3.3) * 0.5 + 0.5) * 8 - 4;
-      const [br, bg2, bb] = pal.bg;
-      ctx.fillStyle = `rgb(${clamp(br+j)},${clamp(bg2+j)},${clamp(bb+j)})`;
-      ctx.fillRect(x, y, CW, CH);
-
-      const [mr, mg, mb] = pal.mark;
-      ctx.strokeStyle = `rgb(${mr},${mg},${mb})`;
-      ctx.lineWidth = lw;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-
-      switch (stitch) {
-        case "knit":
-          ctx.beginPath();
-          ctx.moveTo(x + CW * 0.12, y + CH * 0.17);
-          ctx.lineTo(x + CW * 0.50, y + CH * 0.83);
-          ctx.lineTo(x + CW * 0.88, y + CH * 0.17);
-          ctx.stroke();
-          break;
-        case "purl":
-          ctx.beginPath();
-          ctx.arc(x + CW * 0.50, y + CH * 0.42, CW * 0.30, Math.PI, 0, false);
-          ctx.stroke();
-          break;
-        case "yo":
-          ctx.beginPath();
-          ctx.arc(x + CW * 0.50, y + CH * 0.50, CW * 0.24, 0, Math.PI * 2);
-          ctx.globalAlpha = 0.55;
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-          break;
-        case "decrease":
-          ctx.beginPath();
-          ctx.moveTo(x + CW * 0.72, y + CH * 0.14);
-          ctx.lineTo(x + CW * 0.20, y + CH * 0.86);
-          ctx.stroke();
-          break;
-        case "cable-hi":
-          ctx.beginPath();
-          ctx.moveTo(x, y + CH * 0.62);
-          ctx.bezierCurveTo(x + CW * 0.33, y + CH * 0.14, x + CW * 0.67, y + CH * 0.14, x + CW, y + CH * 0.62);
-          ctx.stroke();
-          break;
-        case "cable-lo":
-          ctx.beginPath();
-          ctx.moveTo(x, y + CH * 0.38);
-          ctx.bezierCurveTo(x + CW * 0.33, y + CH * 0.86, x + CW * 0.67, y + CH * 0.86, x + CW, y + CH * 0.38);
-          ctx.stroke();
-          break;
-        case "slip":
-          ctx.beginPath();
-          ctx.moveTo(x + CW * 0.50, y + CH * 0.10);
-          ctx.lineTo(x + CW * 0.50, y + CH * 0.90);
-          ctx.stroke();
-          break;
-      }
-
-      ctx.fillStyle = "rgba(0,0,0,0.05)";
-      ctx.fillRect(x, y + CH - 1, CW, 1);
+      cells.push({ stitch: row[c] ?? "knit", x: xOff + c * CW, y: r * CH, r, c });
     }
   }
+
+  return { ctx, rowCount, maxCols, CW, CH, lw, cells };
+}
+
+// ── Static renderer (used for rotation / save snapshots) ─────────────────────
+export function renderSwatch(canvas: HTMLCanvasElement, grid: Stitch[][]): void {
+  const layout = buildLayout(canvas, grid);
+  if (!layout) return;
+  const { ctx, CW, CH, lw, cells } = layout;
+  for (const { stitch, x, y, r, c } of cells) {
+    drawCell(ctx, stitch, x, y, CW, CH, lw, r, c);
+  }
+}
+
+// ── Animated renderer — left-to-right, top-to-bottom (typewriter/knitting) ───
+// Returns a cancel function; call it on component unmount.
+export function animateSwatch(
+  canvas: HTMLCanvasElement,
+  grid: Stitch[][],
+  onDone?: () => void,
+): () => void {
+  const layout = buildLayout(canvas, grid);
+  if (!layout) return () => {};
+  const { ctx, CW, CH, lw, cells } = layout;
+
+  const total = cells.length;
+  if (total === 0) return () => {};
+
+  // ~20 rows per second feel; cap total time at 3 s
+  const rowCount = layout.rowCount;
+  const durationMs = Math.min(3000, Math.max(600, rowCount * 50));
+
+  let drawn = 0;
+  let cancelled = false;
+  const startTime = performance.now();
+
+  function frame(now: number) {
+    if (cancelled) return;
+
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / durationMs, 1);
+    const target = Math.floor(progress * total);
+
+    // Draw only the newly revealed cells (canvas retains what's already there)
+    while (drawn < target) {
+      const { stitch, x, y, r, c } = cells[drawn];
+      drawCell(ctx, stitch, x, y, CW, CH, lw, r, c);
+      drawn++;
+    }
+
+    if (progress < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      onDone?.();
+    }
+  }
+
+  requestAnimationFrame(frame);
+  return () => { cancelled = true; };
 }
 
 // ── Rotation helpers ──────────────────────────────────────────────────────────

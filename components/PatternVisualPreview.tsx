@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useMemo, useState, useCallback } from "react";
-import { type Stitch, expandSteps, renderSwatch, buildRotatedCanvas } from "@/lib/knittingSwatch";
+import { type Stitch, expandSteps, animateSwatch, buildRotatedCanvas } from "@/lib/knittingSwatch";
 
 interface Row { label: string; steps: string[] }
 
@@ -23,13 +23,17 @@ export default function PatternVisualPreview({
 }) {
   const canvasRef      = useRef<HTMLCanvasElement>(null);
   const largeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cancelRef      = useRef<(() => void) | null>(null);
   const [enlarged, setEnlarged] = useState(false);
   const [rotation, setRotation] = useState(0);
 
   const grid = useMemo<Stitch[][]>(() => rows.map(r => expandSteps(r.steps)), [rows]);
 
   useEffect(() => {
-    if (canvasRef.current && grid.length > 0) renderSwatch(canvasRef.current, grid);
+    if (!canvasRef.current || grid.length === 0) return;
+    cancelRef.current?.();
+    cancelRef.current = animateSwatch(canvasRef.current, grid);
+    return () => { cancelRef.current?.(); };
   }, [grid]);
 
   useEffect(() => {

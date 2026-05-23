@@ -2,7 +2,7 @@
 import { useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@/lib/utils";
-import { expandSteps, renderSwatch } from "@/lib/knittingSwatch";
+import { expandSteps, animateSwatch } from "@/lib/knittingSwatch";
 
 interface Row { label: string; steps: string[] }
 interface Progress { currentRow: number; currentStep: number; lastUsed: string }
@@ -11,6 +11,7 @@ interface Pattern { id: string; name: string; rows: Row[]; imageData?: string | 
 export default function PatternCard({ pattern, onDelete }: { pattern: Pattern; onDelete: (id: string) => void }) {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cancelRef = useRef<(() => void) | null>(null);
 
   const rows = pattern.rows as Row[];
   const progress = pattern.progress;
@@ -24,7 +25,10 @@ export default function PatternCard({ pattern, onDelete }: { pattern: Pattern; o
   const grid = useMemo(() => rows.map(r => expandSteps(r.steps)), [rows]);
 
   useEffect(() => {
-    if (canvasRef.current && grid.length > 0) renderSwatch(canvasRef.current, grid);
+    if (!canvasRef.current || grid.length === 0) return;
+    cancelRef.current?.();
+    cancelRef.current = animateSwatch(canvasRef.current, grid);
+    return () => { cancelRef.current?.(); };
   }, [grid]);
 
   return (
