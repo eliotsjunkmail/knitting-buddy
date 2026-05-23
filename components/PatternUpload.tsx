@@ -33,7 +33,7 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
     setError(""); setLoading(true);
     if (!append) setStep("review");
     const compressed = await compressImage(file, 1200);
-    const toStore = append ? compressed : await rotateDataUrl(compressed, 180);
+    const toStore = compressed;
     if (!append) setImagePreview(toStore);
     try {
       const blob = dataURLToBlob(compressed);
