@@ -1,9 +1,11 @@
 "use client";
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 interface Row { label: string; steps: string[]; note?: string }
 
 export default function PatternUpload({ onSave, onCancel }: { onSave: (name: string, rows: Row[], imageData: string) => Promise<void>; onCancel: () => void }) {
+  const router = useRouter();
   const [step, setStep] = useState<"upload" | "review" | "name">("upload");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageData, setImageData] = useState("");
@@ -31,6 +33,7 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
       fd.append("image", blob, file.name);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const data = await res.json();
+      if (res.status === 401) { router.push("/"); return; }
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setRows(data.rows as Row[]);
       setImageData(data.imageData);
