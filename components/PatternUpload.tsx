@@ -119,6 +119,8 @@ export default function PatternUpload({ onSave, onCancel }: { onSave: (name: str
                                 style={{ padding: "0.375rem 0.5rem", fontSize: "0.8rem", fontFamily: "monospace", color: "#4c1d95", border: "none", outline: "none", width: "72px", background: "transparent" }} />
                             </div>
                           ))}
+                          <button onClick={() => setRows((p) => p.map((r, i) => i === ri ? { ...r, steps: [...r.steps, ""] } : r))}
+                            style={{ padding: "0.375rem 0.75rem", background: "transparent", border: "1px dashed #c4b5fd", borderRadius: "8px", color: "#8b5cf6", cursor: "pointer", fontSize: "0.8rem" }}>+ step</button>
                         </div>
                       </div>
                     ))}
