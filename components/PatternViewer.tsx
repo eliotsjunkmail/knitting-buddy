@@ -1,11 +1,9 @@
 "use client";
 import { useEffect, useRef, useCallback, useState } from "react";
-import { stepKey, formatDuration } from "@/lib/utils";
-import StatsPanel from "@/components/StatsPanel";
 import PatternVisualPreview from "@/components/PatternVisualPreview";
 
 interface Row { label: string; steps: string[]; note?: string }
-interface Progress { currentRow: number; currentStep: number; lastUsed: string; timePerStep: Record<string, number> }
+interface Progress { currentRow: number; currentStep: number; lastUsed: string }
 interface Pattern { id: string; name: string; rows: Row[]; imageData?: string | null; progress?: Progress | null }
 
 const SAVE_DEBOUNCE = 1500;
@@ -16,28 +14,24 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
 
   const [currentRow, setCurrentRow] = useState(init?.currentRow ?? 0);
   const [currentStep, setCurrentStep] = useState(init?.currentStep ?? 0);
-  const [timePerStep, setTimePerStep] = useState<Record<string, number>>((init?.timePerStep as Record<string, number>) ?? {});
-  const [showStats, setShowStats] = useState(false);
   const [showImage, setShowImage] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [stepTimer, setStepTimer] = useState(0);
   const [micActive, setMicActive] = useState(false);
   const [micSupported, setMicSupported] = useState(false);
   const [lastCommand, setLastCommand] = useState("");
 
-  const stepStartRef = useRef<number>(Date.now());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowRef = useRef(currentRow);
   const stepRef = useRef(currentStep);
-  const tpsRef = useRef(timePerStep);
   const recognitionRef = useRef<any>(null);
   const micActiveRef = useRef(false);
   const touchStartX = useRef<number | null>(null);
   const nextStepRef = useRef<() => void>(() => {});
   const prevStepRef = useRef<() => void>(() => {});
 
-  rowRef.current = currentRow; stepRef.current = currentStep; tpsRef.current = timePerStep;
+  rowRef.current = currentRow;
+  stepRef.current = currentStep;
 
   const totalRows = rows.length;
   const rowData = rows[currentRow] ?? { label: "", steps: [] };
@@ -50,37 +44,25 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     setMicSupported(!!SR);
   }, []);
 
-  useEffect(() => {
-    const t = setInterval(() => setStepTimer(Math.floor((Date.now() - stepStartRef.current) / 1000)), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const scheduleSave = useCallback((r: number, s: number, tps: Record<string, number>) => {
+  const scheduleSave = useCallback((r: number, s: number) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       setSaving(true);
-      try { await fetch(`/api/patterns/${pattern.id}/progress`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentRow: r, currentStep: s, timePerStep: tps }) }); }
-      finally { setSaving(false); }
+      try {
+        await fetch(`/api/patterns/${pattern.id}/progress`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentRow: r, currentStep: s }),
+        });
+      } finally { setSaving(false); }
     }, SAVE_DEBOUNCE);
   }, [pattern.id]);
 
-  const recordTime = useCallback(() => {
-    const elapsed = Math.floor((Date.now() - stepStartRef.current) / 1000);
-    if (elapsed < 1) return tpsRef.current;
-    const key = stepKey(rowRef.current, stepRef.current);
-    const updated = { ...tpsRef.current, [key]: (tpsRef.current[key] ?? 0) + elapsed };
-    setTimePerStep(updated);
-    return updated;
-  }, []);
-
   const navigate = useCallback((r: number, s: number) => {
-    const tps = recordTime();
-    stepStartRef.current = Date.now();
-    setStepTimer(0);
     setCurrentRow(r);
     setCurrentStep(s);
-    scheduleSave(r, s, tps);
-  }, [recordTime, scheduleSave]);
+    scheduleSave(r, s);
+  }, [scheduleSave]);
 
   function nextStep() {
     if (currentStep < totalSteps - 1) navigate(currentRow, currentStep + 1);
@@ -93,7 +75,6 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   function nextRow() { if (currentRow < totalRows - 1) navigate(currentRow + 1, 0); }
   function prevRow() { if (currentRow > 0) navigate(currentRow - 1, 0); }
 
-  // Keep refs current so voice handlers always call the latest version
   nextStepRef.current = nextStep;
   prevStepRef.current = prevStep;
 
@@ -177,7 +158,6 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
               <button onClick={() => setShowImage(true)} style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer" }}>📷</button>
             )}
             <button onClick={() => setShowPreview(true)} style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer" }}>🗺️</button>
-            <button onClick={() => setShowStats(true)} style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer" }}>📊</button>
           </div>
         </div>
         <div style={{ height: "3px", background: "rgba(255,255,255,0.2)" }}>
@@ -229,13 +209,12 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
       <div style={{ background: "white", borderTop: "1px solid #ede9fe", boxShadow: "0 -8px 24px rgba(109,40,217,0.08)", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
         <div style={{ maxWidth: "720px", margin: "0 auto", padding: "0.75rem 1rem" }}>
 
-          {/* Timer + mic status */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.75rem", marginBottom: "0.625rem" }}>
-            <span style={{ fontSize: "0.75rem", color: "#8b5cf6", fontFamily: "monospace", background: "#f5f3ff", padding: "0.25rem 0.75rem", borderRadius: "99px" }}>⏱ {formatDuration(stepTimer)}</span>
-            {micActive && lastCommand && (
+          {/* Mic status */}
+          {micActive && lastCommand && (
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.625rem" }}>
               <span style={{ fontSize: "0.72rem", color: "#7c3aed", background: "#f5f3ff", padding: "0.25rem 0.75rem", borderRadius: "99px" }}>heard: {lastCommand}</span>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Step nav + mic */}
           <div style={{ display: "grid", gridTemplateColumns: micSupported ? "1fr auto 1fr" : "1fr 1fr", gap: "0.625rem", marginBottom: "0.5rem" }}>
@@ -269,7 +248,6 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
         </div>
       </div>
 
-      {showStats && <StatsPanel rows={rows} timePerStep={timePerStep} onClose={() => setShowStats(false)} />}
       {showPreview && <PatternVisualPreview rows={rows} name={pattern.name} onClose={() => setShowPreview(false)} />}
 
       {showImage && pattern.imageData && (

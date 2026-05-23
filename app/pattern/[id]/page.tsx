@@ -27,7 +27,6 @@ export default async function PatternPage({ params }: { params: Promise<{ id: st
               currentRow: pattern.progress.currentRow,
               currentStep: pattern.progress.currentStep,
               lastUsed: pattern.progress.lastUsed.toISOString(),
-              timePerStep: pattern.progress.timePerStep as Record<string, number>,
             }
           : null,
       }}
