@@ -14,8 +14,11 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
 
   const [currentRow, setCurrentRow] = useState(init?.currentRow ?? 0);
   const [currentStep, setCurrentStep] = useState(init?.currentStep ?? 0);
-  const [showImage, setShowImage] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [paperMode, setPaperMode] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
   const [saving, setSaving] = useState(false);
   const [micActive, setMicActive] = useState(false);
   const [micSupported, setMicSupported] = useState(false);
@@ -29,6 +32,10 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const touchStartX = useRef<number | null>(null);
   const nextStepRef = useRef<() => void>(() => {});
   const prevStepRef = useRef<() => void>(() => {});
+  const lastPinchDist = useRef<number | null>(null);
+  const lastPanPos = useRef<{ x: number; y: number } | null>(null);
+  const paperContainerRef = useRef<HTMLDivElement>(null);
+  const stepsScrollRef = useRef<HTMLDivElement>(null);
 
   rowRef.current = currentRow;
   stepRef.current = currentStep;
@@ -43,6 +50,27 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     setMicSupported(!!SR);
   }, []);
+
+  // Prevent native scroll/zoom inside the paper mode container
+  useEffect(() => {
+    const el = paperContainerRef.current;
+    if (!el || !paperMode) return;
+    const prevent = (e: TouchEvent) => e.preventDefault();
+    el.addEventListener("touchmove", prevent, { passive: false });
+    return () => el.removeEventListener("touchmove", prevent);
+  }, [paperMode]);
+
+  // Auto-scroll current step chip into view
+  useEffect(() => {
+    if (!paperMode || !stepsScrollRef.current) return;
+    const chip = stepsScrollRef.current.children[currentStep] as HTMLElement | undefined;
+    chip?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [currentStep, paperMode]);
+
+  // Reset pan when zoom reaches 1
+  useEffect(() => {
+    if (zoom <= 1) { setPanX(0); setPanY(0); }
+  }, [zoom]);
 
   const scheduleSave = useCallback((r: number, s: number) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -99,7 +127,6 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = "en-US";
-
     recognition.onresult = (e: any) => {
       const transcript = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
       if (transcript.includes("next row")) { nextRow(); setLastCommand("next row"); }
@@ -107,10 +134,8 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
       else if (transcript.includes("next") || transcript.includes("forward")) { nextStepRef.current(); setLastCommand("next step"); }
       else if (transcript.includes("back") || transcript.includes("prev") || transcript.includes("previous")) { prevStepRef.current(); setLastCommand("prev step"); }
     };
-
     recognition.onend = () => { if (micActiveRef.current) { try { recognition.start(); } catch {} } };
     recognition.onerror = (e: any) => { if (e.error === "not-allowed") { micActiveRef.current = false; setMicActive(false); } };
-
     recognitionRef.current = recognition;
     micActiveRef.current = true;
     setMicActive(true);
@@ -125,7 +150,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     try { recognitionRef.current?.stop(); } catch {}
   }
 
-  // Swipe to navigate
+  // Swipe to navigate (step mode only)
   function onTouchStart(e: React.TouchEvent) { touchStartX.current = e.touches[0].clientX; }
   function onTouchEnd(e: React.TouchEvent) {
     if (touchStartX.current === null) return;
@@ -134,12 +159,157 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     touchStartX.current = null;
   }
 
+  // Paper mode: pinch-to-zoom + drag-to-pan
+  function onPaperTouchStart(e: React.TouchEvent) {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastPinchDist.current = Math.hypot(dx, dy);
+      lastPanPos.current = null;
+    } else if (e.touches.length === 1) {
+      lastPanPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      lastPinchDist.current = null;
+    }
+  }
+  function onPaperTouchMove(e: React.TouchEvent) {
+    if (e.touches.length === 2 && lastPinchDist.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.hypot(dx, dy);
+      const ratio = newDist / lastPinchDist.current;
+      setZoom(z => Math.min(6, Math.max(1, z * ratio)));
+      lastPinchDist.current = newDist;
+    } else if (e.touches.length === 1 && lastPanPos.current) {
+      const dx = e.touches[0].clientX - lastPanPos.current.x;
+      const dy = e.touches[0].clientY - lastPanPos.current.y;
+      setPanX(x => x + dx);
+      setPanY(y => y + dy);
+      lastPanPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  }
+  function onPaperTouchEnd() {
+    lastPinchDist.current = null;
+    lastPanPos.current = null;
+  }
+
+  function openPaperMode() { setZoom(1); setPanX(0); setPanY(0); setPaperMode(true); }
+  function closePaperMode() { setPaperMode(false); }
+  function zoomIn() { setZoom(z => Math.min(6, z * 1.4)); }
+  function zoomOut() { setZoom(z => { const next = z / 1.4; return next < 1.1 ? 1 : next; }); }
+  function zoomReset() { setZoom(1); setPanX(0); setPanY(0); }
+
   const overallPct = totalRows > 0 ? ((currentRow + (currentStep + 1) / (totalSteps || 1)) / totalRows) * 100 : 0;
   const prevStepText = currentStep > 0 ? rowData.steps[currentStep - 1] : currentRow > 0 ? rows[currentRow - 1]?.steps?.at(-1) : null;
   const nextStepText = currentStep < totalSteps - 1 ? rowData.steps[currentStep + 1] : currentRow < totalRows - 1 ? rows[currentRow + 1]?.steps?.[0] : null;
   const prevRowLabel = currentStep > 0 ? rowData.label : currentRow > 0 ? rows[currentRow - 1]?.label : null;
   const nextRowLabel = currentStep < totalSteps - 1 ? rowData.label : currentRow < totalRows - 1 ? rows[currentRow + 1]?.label : null;
 
+  // ── Paper mode overlay ────────────────────────────────────────────────────
+  if (paperMode && pattern.imageData) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "#111", zIndex: 40, display: "flex", flexDirection: "column" }}>
+        {/* Paper mode header */}
+        <div style={{ background: "linear-gradient(135deg, #4c1d95, #7c3aed)", flexShrink: 0, boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }}>
+          <div style={{ padding: "0 1rem", height: "52px", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <button onClick={closePaperMode} style={{ width: "34px", height: "34px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer" }}>←</button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: "rgba(255,255,255,0.85)", fontSize: "0.8rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {pattern.name} — Paper
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.68rem" }}>
+                Row {currentRow + 1}/{totalRows} · Step {currentStep + 1}/{totalSteps}
+                {saving && <span style={{ marginLeft: "0.5rem" }}>saving…</span>}
+              </div>
+            </div>
+            {/* Zoom controls */}
+            <div style={{ display: "flex", gap: "0.25rem" }}>
+              <button onClick={zoomOut} style={{ width: "34px", height: "34px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1.1rem", cursor: "pointer", fontWeight: 700 }}>−</button>
+              <button onClick={zoomReset} style={{ height: "34px", padding: "0 0.6rem", background: zoom !== 1 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.1)", border: "none", borderRadius: "8px", color: "white", fontSize: "0.72rem", cursor: "pointer", fontWeight: 600, minWidth: "40px" }}>{Math.round(zoom * 10) / 10}×</button>
+              <button onClick={zoomIn}  style={{ width: "34px", height: "34px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1.1rem", cursor: "pointer", fontWeight: 700 }}>+</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Image + step overlay */}
+        <div
+          ref={paperContainerRef}
+          onTouchStart={onPaperTouchStart}
+          onTouchMove={onPaperTouchMove}
+          onTouchEnd={onPaperTouchEnd}
+          style={{ flex: 1, overflow: "hidden", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}
+        >
+          <img
+            src={pattern.imageData}
+            alt="Pattern"
+            draggable={false}
+            style={{
+              maxWidth: "100%", maxHeight: "100%",
+              objectFit: "contain",
+              transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+              transformOrigin: "center center",
+              userSelect: "none",
+              touchAction: "none",
+              transition: lastPinchDist.current ? "none" : "transform 0.15s ease-out",
+            }}
+          />
+
+          {/* Step progress overlay */}
+          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.0) 100%)", paddingBottom: "0.75rem", paddingTop: "2rem", pointerEvents: "none" }}>
+            <div style={{ paddingLeft: "0.75rem", marginBottom: "0.4rem", fontSize: "0.68rem", fontWeight: 700, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              {rowData.label}
+            </div>
+            <div
+              ref={stepsScrollRef}
+              style={{ display: "flex", gap: "0.375rem", overflowX: "auto", padding: "0 0.75rem", scrollbarWidth: "none", pointerEvents: "auto" }}
+            >
+              {rowData.steps.map((step, i) => {
+                const isDone = i < currentStep;
+                const isCurrent = i === currentStep;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => navigate(currentRow, i)}
+                    style={{
+                      flexShrink: 0,
+                      padding: "0.3rem 0.6rem",
+                      borderRadius: "7px",
+                      fontSize: "0.78rem",
+                      fontFamily: "monospace",
+                      fontWeight: isCurrent ? 700 : 400,
+                      background: isCurrent ? "white" : isDone ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.18)",
+                      color: isCurrent ? "#dc2626" : isDone ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.85)",
+                      border: isCurrent ? "2px solid #dc2626" : "2px solid transparent",
+                      textDecoration: isDone ? "line-through" : "none",
+                      cursor: "pointer",
+                      boxShadow: isCurrent ? "0 0 0 3px rgba(220,38,38,0.3)" : "none",
+                    }}
+                  >
+                    {step}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom nav */}
+        <div style={{ background: "#1a1a2e", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
+          <div style={{ padding: "0.625rem 1rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.625rem" }}>
+            <button onClick={prevStep} disabled={isAtStart}
+              style={{ padding: "0.875rem", background: isAtStart ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.1)", color: isAtStart ? "rgba(255,255,255,0.3)" : "white", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: isAtStart ? "not-allowed" : "pointer" }}>
+              ← Prev
+            </button>
+            <button onClick={nextStep} disabled={isAtEnd}
+              style={{ padding: "0.875rem", background: isAtEnd ? "rgba(124,58,237,0.3)" : "linear-gradient(135deg, #7c3aed, #6d28d9)", color: "white", border: "none", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: isAtEnd ? "not-allowed" : "pointer", opacity: isAtEnd ? 0.5 : 1, boxShadow: isAtEnd ? "none" : "0 4px 12px rgba(124,58,237,0.4)" }}>
+              Next →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step mode (default) ───────────────────────────────────────────────────
   return (
     <div style={{ minHeight: "100vh", background: "#f8f7ff", display: "flex", flexDirection: "column" }}>
       {/* Header */}
@@ -155,7 +325,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
           </div>
           <div style={{ display: "flex", gap: "0.375rem" }}>
             {pattern.imageData && (
-              <button onClick={() => setShowImage(true)} style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer" }}>📷</button>
+              <button onClick={openPaperMode} style={{ height: "36px", padding: "0 0.75rem", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", letterSpacing: "0.02em" }}>📄 Paper</button>
             )}
             <button onClick={() => setShowPreview(true)} style={{ width: "36px", height: "36px", background: "rgba(255,255,255,0.15)", border: "none", borderRadius: "8px", color: "white", fontSize: "1rem", cursor: "pointer" }}>🗺️</button>
           </div>
@@ -249,12 +419,6 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
       </div>
 
       {showPreview && <PatternVisualPreview rows={rows} name={pattern.name} currentRow={currentRow} onClose={() => setShowPreview(false)} />}
-
-      {showImage && pattern.imageData && (
-        <div onClick={() => setShowImage(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
-          <img src={pattern.imageData} alt="Pattern" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: "12px", objectFit: "contain" }} />
-        </div>
-      )}
     </div>
   );
 }
