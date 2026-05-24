@@ -14,6 +14,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const [currentRow,  setCurrentRow]  = useState(init?.currentRow  ?? 0);
   const [currentStep, setCurrentStep] = useState(init?.currentStep ?? 0);
   const [paperMode,   setPaperMode]   = useState(false);
+  const [docMode,     setDocMode]     = useState(true);  // default: clean doc view (exact positions)
   const [zoom,  setZoom]  = useState(1);
   const [panX,  setPanX]  = useState(0);
   const [panY,  setPanY]  = useState(0);
@@ -45,6 +46,8 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const paperContainerRef = useRef<HTMLDivElement>(null);
   const stepsScrollRef   = useRef<HTMLDivElement>(null);
   const imgRef           = useRef<HTMLImageElement>(null);
+  const docDivRef        = useRef<HTMLDivElement>(null);
+  const rowRefs          = useRef<(HTMLDivElement | null)[]>([]);
   // Stores starting touch + starting hl percentage at drag onset
   const hlDragRef = useRef<{ sx: number; sy: number; shx: number; shy: number } | null>(null);
 
@@ -138,6 +141,21 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
       }
     }
   }, [currentRow, paperMode, rows]);
+
+  // Doc-view auto-pan: centre current row using exact DOM measurements
+  useEffect(() => {
+    if (!paperMode || !docMode) return;
+    const rowEl = rowRefs.current[currentRow];
+    const docEl = docDivRef.current;
+    if (!rowEl || !docEl) return;
+    const docH = docEl.offsetHeight;
+    if (!docH) return;
+    const rowFrac = (rowEl.offsetTop + rowEl.offsetHeight / 2) / docH;
+    const targetZoom = zoomRef.current < 1.5 ? 2.5 : zoomRef.current;
+    if (targetZoom !== zoomRef.current) setZoom(targetZoom);
+    setPanX(0);
+    setPanY(targetZoom * docH * (0.5 - rowFrac));
+  }, [currentRow, paperMode, docMode]);
 
   const scheduleSave = useCallback((r: number, s: number) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -269,6 +287,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const prevRowLabel = currentStep > 0 ? rowData.label : currentRow > 0 ? rows[currentRow - 1]?.label : null;
   const nextRowLabel = currentStep < totalSteps - 1 ? rowData.label : currentRow < totalRows - 1 ? rows[currentRow + 1]?.label : null;
   const hasPaper = !!pattern.imageData;
+  const hasPaperOrRows = hasPaper || rows.length > 0; // doc view works for all patterns
 
   // ── Shared header ─────────────────────────────────────────────────────────
   const header = (
@@ -282,13 +301,13 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
             {saving && <span style={{ marginLeft: "0.5rem", opacity: 0.7 }}>saving…</span>}
           </div>
         </div>
-        {hasPaper && (
+        {hasPaperOrRows && (
           <div style={{ display: "flex", background: "rgba(0,0,0,0.28)", borderRadius: "20px", padding: "3px", gap: "2px" }}>
             <button onClick={() => setPaperMode(false)}
               style={{ padding: "5px 12px", borderRadius: "16px", background: !paperMode ? "white" : "transparent", color: !paperMode ? "#4c1d95" : "rgba(255,255,255,0.75)", border: "none", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}>
               Step
             </button>
-            <button onClick={() => { setZoom(1); setPanX(0); setPanY(0); setPaperMode(true); }}
+            <button onClick={() => { setZoom(1); setPanX(0); setPanY(0); setDocMode(true); setPaperMode(true); }}
               style={{ padding: "5px 12px", borderRadius: "16px", background: paperMode ? "white" : "transparent", color: paperMode ? "#4c1d95" : "rgba(255,255,255,0.75)", border: "none", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}>
               Paper
             </button>
@@ -302,12 +321,12 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   );
 
   // ── Paper mode ────────────────────────────────────────────────────────────
-  if (paperMode && hasPaper) {
+  if (paperMode) {
     return (
       <div style={{ height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", background: "#111" }}>
         {header}
 
-        {/* Image area — fills all space between header and bottom UI */}
+        {/* Content area */}
         <div
           ref={paperContainerRef}
           onTouchStart={onPaperTouchStart}
@@ -315,78 +334,110 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
           onTouchEnd={onPaperTouchEnd}
           style={{ flex: 1, minHeight: 0, overflow: "hidden", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none" }}
         >
-          {/* Transform group: image + highlight move together */}
+          {/* Transform group */}
           <div style={{
             transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
             transformOrigin: "center center",
             display: "inline-block",
             position: "relative",
-            lineHeight: 0,
-            maxWidth: "100%",
-            maxHeight: "100%",
+            ...(docMode ? {} : { maxWidth: "100%", maxHeight: "100%", lineHeight: 0 }),
           }}>
-            <img
-              ref={imgRef}
-              src={pattern.imageData!}
-              alt="Pattern"
-              draggable={false}
-              style={{ display: "block", maxWidth: "100%", maxHeight: "100%", userSelect: "none", touchAction: "none", pointerEvents: "none" }}
-            />
 
-            {/* Highlight box in image-element coordinate space */}
-            <div
-              onTouchStart={onHLTouchStart}
-              onTouchMove={onHLTouchMove}
-              onTouchEnd={onHLTouchEnd}
-              style={{
-                position: "absolute",
-                left: `${hlXPct}%`,
-                top: `${hlYPct}%`,
-                width: `${hlWPct}%`,
-                height: `${hlHPct}%`,
-                // 1/zoom keeps border visually 1px at any zoom level
-                border: `${1 / zoom}px solid #dc2626`,
-                borderRadius: `${2 / zoom}px`,
-                background: "rgba(255, 255, 210, 0.10)",
-                cursor: "move",
-                touchAction: "none",
-                boxSizing: "border-box",
-                zIndex: 2,
-              }}
-            >
-              {hlHint && !rows[currentRow]?.bbox && (
-                <div style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  marginTop: `${3 / zoom}px`,
-                  fontSize: `${11 / zoom}px`,
-                  lineHeight: 1.3,
-                  color: "white",
-                  background: "rgba(220,38,38,0.82)",
-                  padding: `${2 / zoom}px ${5 / zoom}px`,
-                  borderRadius: `${3 / zoom}px`,
-                  whiteSpace: "nowrap",
-                  pointerEvents: "none",
-                }}>
-                  drag to your current row
+            {docMode ? (
+              /* ── Doc view: clean text rendering with exact row positions ── */
+              <div
+                ref={docDivRef}
+                style={{ width: "640px", background: "white", padding: "20px 16px 32px", fontFamily: "ui-monospace, 'Courier New', monospace" }}
+              >
+                <div style={{ fontWeight: 700, color: "#4c1d95", fontSize: "13px", textAlign: "center", marginBottom: "14px", fontFamily: "system-ui, sans-serif" }}>
+                  {pattern.name}
                 </div>
-              )}
-            </div>
+                {rows.map((row, i) => {
+                  const isCurrent = i === currentRow;
+                  const isDone = i < currentRow;
+                  return (
+                    <div
+                      key={i}
+                      ref={el => { rowRefs.current[i] = el; }}
+                      style={{
+                        padding: "5px 8px",
+                        margin: "1px 0",
+                        border: `${1 / zoom}px solid ${isCurrent ? "#dc2626" : "transparent"}`,
+                        borderRadius: `${3 / zoom}px`,
+                        background: isCurrent ? "rgba(255,255,210,0.6)" : "transparent",
+                        opacity: isDone ? 0.38 : 1,
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      <span style={{ fontWeight: 700, color: "#1e1b4b", fontSize: "13px", textDecoration: isDone ? "line-through" : "none" }}>
+                        {row.label}:
+                      </span>{" "}
+                      <span style={{ color: "#374151", fontSize: "13px", textDecoration: isDone ? "line-through" : "none" }}>
+                        {row.steps.join(", ")}
+                      </span>
+                      {row.note && <div style={{ fontSize: "11px", color: "#6b7280", fontStyle: "italic", marginTop: "1px" }}>{row.note}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* ── Photo view: original image + draggable highlight ── */
+              <>
+                <img
+                  ref={imgRef}
+                  src={pattern.imageData!}
+                  alt="Pattern"
+                  draggable={false}
+                  style={{ display: "block", maxWidth: "100%", maxHeight: "100%", userSelect: "none", touchAction: "none", pointerEvents: "none" }}
+                />
+                <div
+                  onTouchStart={onHLTouchStart}
+                  onTouchMove={onHLTouchMove}
+                  onTouchEnd={onHLTouchEnd}
+                  style={{
+                    position: "absolute",
+                    left: `${hlXPct}%`, top: `${hlYPct}%`,
+                    width: `${hlWPct}%`, height: `${hlHPct}%`,
+                    border: `${1 / zoom}px solid #dc2626`,
+                    borderRadius: `${2 / zoom}px`,
+                    background: "rgba(255,255,210,0.10)",
+                    cursor: "move", touchAction: "none", boxSizing: "border-box", zIndex: 2,
+                  }}
+                >
+                  {hlHint && !rows[currentRow]?.bbox && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, marginTop: `${3/zoom}px`, fontSize: `${11/zoom}px`, lineHeight: 1.3, color: "white", background: "rgba(220,38,38,0.82)", padding: `${2/zoom}px ${5/zoom}px`, borderRadius: `${3/zoom}px`, whiteSpace: "nowrap", pointerEvents: "none" }}>
+                      drag to your current row
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Row-detection status overlays */}
-          {bboxDetecting && (
-            <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.65)", color: "white", fontSize: "0.72rem", padding: "0.3rem 0.8rem", borderRadius: "99px", zIndex: 10, whiteSpace: "nowrap", pointerEvents: "none" }}>
+          {/* Photo / Doc toggle — only shown when image exists */}
+          {hasPaper && (
+            <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.6)", borderRadius: "20px", padding: "3px", display: "flex", gap: "2px", zIndex: 10 }}>
+              <button onClick={() => { setDocMode(true); setZoom(1); setPanX(0); setPanY(0); }}
+                style={{ padding: "4px 12px", borderRadius: "16px", background: docMode ? "white" : "transparent", color: docMode ? "#4c1d95" : "rgba(255,255,255,0.75)", border: "none", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer" }}>
+                Doc
+              </button>
+              <button onClick={() => { setDocMode(false); setZoom(1); setPanX(0); setPanY(0); }}
+                style={{ padding: "4px 12px", borderRadius: "16px", background: !docMode ? "white" : "transparent", color: !docMode ? "#4c1d95" : "rgba(255,255,255,0.75)", border: "none", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer" }}>
+                Photo
+              </button>
+            </div>
+          )}
+
+          {/* Photo-mode: bbox detection overlays */}
+          {!docMode && bboxDetecting && (
+            <div style={{ position: "absolute", bottom: 44, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.65)", color: "white", fontSize: "0.72rem", padding: "0.3rem 0.8rem", borderRadius: "99px", zIndex: 10, whiteSpace: "nowrap", pointerEvents: "none" }}>
               Locating rows…
             </div>
           )}
-          {bboxFailed && !bboxDetecting && (
-            <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.72)", color: "white", fontSize: "0.72rem", padding: "0.3rem 0.8rem", borderRadius: "99px", zIndex: 10, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {!docMode && bboxFailed && !bboxDetecting && (
+            <div style={{ position: "absolute", bottom: 44, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.72)", color: "white", fontSize: "0.72rem", padding: "0.3rem 0.8rem", borderRadius: "99px", zIndex: 10, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <span>Could not locate rows</span>
-              <button onClick={runBboxDetection} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", borderRadius: "4px", padding: "0.1rem 0.4rem", cursor: "pointer", fontSize: "0.72rem" }}>
-                Retry
-              </button>
+              <button onClick={runBboxDetection} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", borderRadius: "4px", padding: "0.1rem 0.4rem", cursor: "pointer", fontSize: "0.72rem" }}>Retry</button>
             </div>
           )}
 
