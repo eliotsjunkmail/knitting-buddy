@@ -26,14 +26,19 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const [, mediaType, base64] = match;
 
   const rows = pattern.rows as BboxRow[];
+  const labels = rows.map(r => r.label);
 
   try {
-    // Ask for just two anchor points — first row Y and last row Y.
-    // Asking for 28 individual positions produces compounding errors;
-    // two anchors + linear interpolation is far more reliable.
+    // Ask Claude to:
+    // 1. Count total distinct row-instruction lines visible in the image
+    // 2. Give the ordinal position (1 = topmost) of each label we care about
+    // 3. Give y-position of the very first and very last row instruction line
+    //
+    // We then compute each row's y from its ordinal, avoiding the mismatch
+    // between extracted-row count and image-row count.
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 256,
+      max_tokens: 512,
       messages: [{
         role: "user",
         content: [
@@ -47,21 +52,31 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           },
           {
             type: "text",
-            text: `This image contains a knitting pattern. It may include a phone status bar, email app header, or other UI above the actual pattern document — those are all part of the image.
+            text: `This image contains a knitting pattern. It may be a photo of a printed page or a screenshot.
 
 COORDINATE SYSTEM:
-y = 0.0 → absolute TOP pixel of the image (regardless of what is there)
-y = 1.0 → absolute BOTTOM pixel of the image
+y = 0.0 → very top pixel of the image
+y = 1.0 → very bottom pixel of the image
+(Include any background, phone UI, or margins — measure from the absolute image edges.)
 
-Find the knitting row instructions in this image (lines like "Cast on", "Row 1", "Row 1 to 15:", "Row 16 [WS]:", etc.).
+Tasks:
+1. Scan the image top-to-bottom and count every distinct row instruction line you can see (e.g. "Cast on", "Row 1 to 15", "Row 16 [WS]", "Row 17 [RS]", etc.).
+2. For each label listed below, give its ORDINAL POSITION among all row instructions (1 = first/topmost line, 2 = second, etc.).
+3. Give the y-center of the FIRST row instruction line (y=0 is image top).
+4. Give the y-center of the LAST row instruction line visible.
 
-Return ONLY this JSON (no markdown, no explanation):
-{ "firstRowY": 0.61, "lastRowY": 0.94 }
+Labels to find:
+${JSON.stringify(labels)}
 
-firstRowY = y-center of the FIRST row instruction line in the image
-lastRowY  = y-center of the LAST  row instruction line in the image
+Return ONLY this JSON (no markdown):
+{
+  "firstRowY": 0.60,
+  "lastRowY": 0.93,
+  "totalLines": 28,
+  "ordinals": [1, 2, 3, 4, 5, 6, 7, 8, 9]
+}
 
-Both values must be between 0.0 and 1.0, and lastRowY must be greater than firstRowY.`,
+ordinals: one integer per label in the same order as the input list. Use -1 if a label cannot be found.`,
           },
         ],
       }],
@@ -73,25 +88,58 @@ Both values must be between 0.0 and 1.0, and lastRowY must be greater than first
 
     const firstRowY: number = parsed?.firstRowY;
     const lastRowY:  number = parsed?.lastRowY;
+    const totalLines: number = parsed?.totalLines;
+    const ordinals: number[] = parsed?.ordinals;
 
-    // Validate the two anchors
+    // Validate
     if (
       typeof firstRowY !== "number" || typeof lastRowY !== "number" ||
+      typeof totalLines !== "number" || !Array.isArray(ordinals) ||
+      ordinals.length !== labels.length ||
       firstRowY < 0 || firstRowY > 1 || lastRowY < 0 || lastRowY > 1 ||
-      lastRowY <= firstRowY + 0.05
+      lastRowY <= firstRowY + 0.05 || totalLines < 1
     ) {
       const nulledRows = rows.map(r => ({ ...r, bbox: null }));
       await prisma.pattern.update({ where: { id }, data: { rows: nulledRows } });
       return NextResponse.json({ rows: nulledRows, warning: "Could not identify row bounds" });
     }
 
-    // Linearly interpolate each row's Y between the two anchors
-    const n = rows.length;
-    const rowH = Math.min(0.05, (lastRowY - firstRowY) / Math.max(n - 1, 1) * 0.85);
+    // Validate ordinals are roughly monotonically increasing
+    let lastOrdinal = -1;
+    let badCount = 0;
+    for (const o of ordinals) {
+      if (o < 0) continue;
+      if (o < lastOrdinal) badCount++;
+      else lastOrdinal = o;
+    }
+    if (badCount > ordinals.length * 0.2) {
+      const nulledRows = rows.map(r => ({ ...r, bbox: null }));
+      await prisma.pattern.update({ where: { id }, data: { rows: nulledRows } });
+      return NextResponse.json({ rows: nulledRows, warning: "Row order inconsistent" });
+    }
+
+    const rowH = Math.min(0.05, (lastRowY - firstRowY) / Math.max(totalLines - 1, 1) * 0.85);
+
+    // For rows with ordinal=-1, interpolate from surrounding valid ordinals
+    const finalOrdinals: (number | null)[] = ordinals.map(o => o >= 1 ? o : null);
+    for (let i = 0; i < finalOrdinals.length; i++) {
+      if (finalOrdinals[i] !== null) continue;
+      let lo = i - 1, hi = i + 1;
+      while (lo >= 0 && finalOrdinals[lo] === null) lo--;
+      while (hi < finalOrdinals.length && finalOrdinals[hi] === null) hi++;
+      if (lo >= 0 && hi < finalOrdinals.length) {
+        finalOrdinals[i] = finalOrdinals[lo]! + (finalOrdinals[hi]! - finalOrdinals[lo]!) * ((i - lo) / (hi - lo));
+      } else if (lo >= 0) {
+        finalOrdinals[i] = finalOrdinals[lo]! + (i - lo);
+      } else if (hi < finalOrdinals.length) {
+        finalOrdinals[i] = finalOrdinals[hi]! - (hi - i);
+      }
+    }
+
     const updatedRows = rows.map((r, i) => {
-      const yCenter = n === 1
-        ? firstRowY
-        : firstRowY + (i / (n - 1)) * (lastRowY - firstRowY);
+      const ord = finalOrdinals[i];
+      if (ord === null) return { ...r, bbox: null };
+      const yCenter = firstRowY + ((ord - 1) / Math.max(totalLines - 1, 1)) * (lastRowY - firstRowY);
       return {
         ...r,
         bbox: {
