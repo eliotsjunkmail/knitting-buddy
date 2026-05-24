@@ -22,7 +22,8 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const [panY,  setPanY]  = useState(0);
   // Highlight position stored as % of image element dims — survives zoom/resize
   const [hlXPct, setHlXPct] = useState(5);
-  const [hlYPct, setHlYPct] = useState(5);
+  const [hlYPct, setHlYPct] = useState(32); // start mid-page where row content typically lives
+  const [hlHint, setHlHint] = useState(true); // disappears after first drag
   const [saving,       setSaving]       = useState(false);
   const [micActive,    setMicActive]    = useState(false);
   const [micSupported, setMicSupported] = useState(false);
@@ -180,6 +181,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   // Highlight drag — position in image-element %, divides screen delta by zoom
   function onHLTouchStart(e: React.TouchEvent) {
     e.stopPropagation();
+    setHlHint(false);
     hlDragRef.current = { sx: e.touches[0].clientX, sy: e.touches[0].clientY, shx: hlXPct, shy: hlYPct };
   }
   function onHLTouchMove(e: React.TouchEvent) {
@@ -282,16 +284,35 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
                 top: `${hlYPct}%`,
                 width: `${HL_W_PCT}%`,
                 height: `${HL_H_PCT}%`,
-                // 1/zoom keeps it visually 1px regardless of zoom level
+                // 1/zoom keeps border visually 1px at any zoom level
                 border: `${1 / zoom}px solid #dc2626`,
                 borderRadius: `${2 / zoom}px`,
-                background: "rgba(255, 252, 150, 0.42)",
+                background: "rgba(255, 255, 210, 0.10)",
                 cursor: "move",
                 touchAction: "none",
                 boxSizing: "border-box",
                 zIndex: 2,
               }}
-            />
+            >
+              {hlHint && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  marginTop: `${3 / zoom}px`,
+                  fontSize: `${11 / zoom}px`,
+                  lineHeight: 1.3,
+                  color: "white",
+                  background: "rgba(220,38,38,0.82)",
+                  padding: `${2 / zoom}px ${5 / zoom}px`,
+                  borderRadius: `${3 / zoom}px`,
+                  whiteSpace: "nowrap",
+                  pointerEvents: "none",
+                }}>
+                  drag to your current row
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Floating zoom controls */}
