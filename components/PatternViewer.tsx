@@ -367,9 +367,27 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
                       <span style={{ fontWeight: 700, color: "#1e1b4b", fontSize: "15px", textDecoration: isDone ? "line-through" : "none" }}>
                         {row.label}:
                       </span>{" "}
-                      <span style={{ color: "#374151", fontSize: "15px", textDecoration: isDone ? "line-through" : "none" }}>
-                        {row.steps.join(", ")}
-                      </span>
+                      {isCurrent ? (
+                        // Current row: render each step individually so we can highlight the active one
+                        row.steps.map((step, si) => {
+                          const isActiveStep = si === currentStep;
+                          const isPastStep   = si < currentStep;
+                          return (
+                            <span key={si} style={{
+                              fontSize: "15px",
+                              fontWeight: isActiveStep ? 700 : 400,
+                              color: isActiveStep ? "#16a34a" : isPastStep ? "#9ca3af" : "#374151",
+                              textDecoration: isPastStep ? "line-through" : "none",
+                            }}>
+                              {step}{si < row.steps.length - 1 ? ", " : ""}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <span style={{ color: "#374151", fontSize: "15px", textDecoration: isDone ? "line-through" : "none" }}>
+                          {row.steps.join(", ")}
+                        </span>
+                      )}
                       {row.note && <div style={{ fontSize: "12px", color: "#6b7280", fontStyle: "italic", marginTop: "2px" }}>{row.note}</div>}
                     </div>
                   );
