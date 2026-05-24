@@ -214,8 +214,8 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
       const t = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
       if (t.includes("next row")) { nextRow(); setLastCommand("next row"); }
       else if (t.includes("prev row") || t.includes("previous row")) { prevRow(); setLastCommand("prev row"); }
-      else if (t.includes("knit next")) { nextStepRef.current(); setLastCommand("knit next"); }
-      else if (t.includes("back") || t.includes("prev") || t.includes("previous")) { prevStepRef.current(); setLastCommand("prev step"); }
+      else if (t.includes("knit next") || t.includes("next")) { nextStepRef.current(); setLastCommand("next"); }
+      else if (t.includes("knit previous") || t.includes("previous") || t.includes("back") || t.includes("prev")) { prevStepRef.current(); setLastCommand("previous"); }
     };
     recognition.onend = () => { if (micActiveRef.current) { try { recognition.start(); } catch {} } };
     recognition.onerror = (e: any) => { if (e.error === "not-allowed") { micActiveRef.current = false; setMicActive(false); } };
