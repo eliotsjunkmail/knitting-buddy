@@ -106,8 +106,13 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     if (!paperMode || !pattern.imageData || bboxFetchedRef.current) return;
     const validBboxes = rows.map(r => r.bbox).filter(Boolean) as { y: number }[];
     const hasBboxes = validBboxes.length > 0;
-    const looksWrong = hasBboxes && validBboxes.every(b => b.y < 0.55);
-    if (hasBboxes && !looksWrong) return;
+    if (hasBboxes) {
+      const ys = validBboxes.map(b => b.y);
+      const yRange = Math.max(...ys) - Math.min(...ys);
+      // If the bboxes only span < 15% of image height, they're bunched together — bad detection
+      const looksWrong = rows.length > 3 && yRange < 0.15;
+      if (!looksWrong) return;
+    }
     runBboxDetection();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paperMode]);

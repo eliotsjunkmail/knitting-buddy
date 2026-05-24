@@ -26,15 +26,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const [, mediaType, base64] = match;
 
   const rows = pattern.rows as BboxRow[];
-  const labels = rows.map(r => r.label);
 
   try {
-    // Ask for just y-center values — simpler task, more accurate than full bboxes.
-    // Critically: be explicit that y=0 is the absolute top pixel of the image,
-    // including any phone status bar or app UI that may appear above the pattern.
+    // Ask for just two anchor points — first row Y and last row Y.
+    // Asking for 28 individual positions produces compounding errors;
+    // two anchors + linear interpolation is far more reliable.
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 1024,
+      max_tokens: 256,
       messages: [{
         role: "user",
         content: [
@@ -48,23 +47,21 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           },
           {
             type: "text",
-            text: `This image contains a knitting pattern. Some of the image may be taken up by a phone status bar, email app header, or other UI at the top — that is still part of the image.
+            text: `This image contains a knitting pattern. It may include a phone status bar, email app header, or other UI above the actual pattern document — those are all part of the image.
 
 COORDINATE SYSTEM:
-- y = 0.0 means the very top pixel of the entire image (including any UI/header above the document)
-- y = 1.0 means the very bottom pixel of the entire image
-- Measure from the absolute image edges, not from the document margin
+y = 0.0 → absolute TOP pixel of the image (regardless of what is there)
+y = 1.0 → absolute BOTTOM pixel of the image
 
-For each row label below, find that text line in the image and return its y_center: the vertical centre of that text line as a decimal fraction of the full image height (0.0 = image top, 1.0 = image bottom).
+Find the knitting row instructions in this image (lines like "Cast on", "Row 1", "Row 1 to 15:", "Row 16 [WS]:", etc.).
 
-Row labels (these appear top-to-bottom in the pattern document):
-${JSON.stringify(labels)}
+Return ONLY this JSON (no markdown, no explanation):
+{ "firstRowY": 0.61, "lastRowY": 0.94 }
 
-Return ONLY this JSON, no markdown, no explanation:
-{"y": [0.61, 0.64, 0.67, ...]}
+firstRowY = y-center of the FIRST row instruction line in the image
+lastRowY  = y-center of the LAST  row instruction line in the image
 
-Return exactly ${labels.length} values in the same order as the labels above.
-Use -1 for any label you cannot locate.`,
+Both values must be between 0.0 and 1.0, and lastRowY must be greater than firstRowY.`,
           },
         ],
       }],
@@ -74,68 +71,27 @@ Use -1 for any label you cannot locate.`,
     const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
     const parsed = JSON.parse(cleaned);
 
-    if (!parsed || !Array.isArray(parsed.y) || parsed.y.length !== labels.length) {
-      throw new Error("Unexpected response shape");
-    }
+    const firstRowY: number = parsed?.firstRowY;
+    const lastRowY:  number = parsed?.lastRowY;
 
-    const rawY: number[] = parsed.y;
-
-    // Validate: check monotonicity (rows must be top-to-bottom in the document)
-    const validY = rawY.filter(v => v >= 0 && v <= 1);
-    let monotonic = true;
-    let prev = -1;
-    for (const v of rawY) {
-      if (v < 0) continue; // skip not-found rows
-      if (v < prev - 0.02) { monotonic = false; break; } // allow 2% slack
-      prev = v;
-    }
-
-    const validFraction = validY.length / labels.length;
-
-    // If fewer than half the rows were located OR the order is wrong, detection failed
-    if (!monotonic || validFraction < 0.5) {
+    // Validate the two anchors
+    if (
+      typeof firstRowY !== "number" || typeof lastRowY !== "number" ||
+      firstRowY < 0 || firstRowY > 1 || lastRowY < 0 || lastRowY > 1 ||
+      lastRowY <= firstRowY + 0.05
+    ) {
       const nulledRows = rows.map(r => ({ ...r, bbox: null }));
       await prisma.pattern.update({ where: { id }, data: { rows: nulledRows } });
-      return NextResponse.json({ rows: nulledRows, warning: "Detection accuracy too low" });
+      return NextResponse.json({ rows: nulledRows, warning: "Could not identify row bounds" });
     }
 
-    // Estimate a typical row height from the median gap between adjacent valid rows
-    const validValues = rawY.filter(v => v >= 0);
-    let rowH = 0.025; // default ~2.5% of image height
-    if (validValues.length >= 2) {
-      const gaps: number[] = [];
-      for (let i = 1; i < validValues.length; i++) {
-        gaps.push(validValues[i] - validValues[i - 1]);
-      }
-      gaps.sort((a, b) => a - b);
-      const medianGap = gaps[Math.floor(gaps.length / 2)];
-      if (medianGap > 0.005 && medianGap < 0.15) rowH = Math.min(medianGap * 0.9, 0.05);
-    }
-
-    // Build final rows: use detected y, fill not-found via linear interpolation
-    // First pass: assign detected values
-    const yArr: (number | null)[] = rawY.map(v => (v >= 0 && v <= 1 ? v : null));
-
-    // Second pass: interpolate nulls
-    for (let i = 0; i < yArr.length; i++) {
-      if (yArr[i] !== null) continue;
-      // find nearest valid values on each side
-      let lo = i - 1;
-      let hi = i + 1;
-      while (lo >= 0 && yArr[lo] === null) lo--;
-      while (hi < yArr.length && yArr[hi] === null) hi++;
-      if (lo >= 0 && hi < yArr.length) {
-        yArr[i] = yArr[lo]! + (yArr[hi]! - yArr[lo]!) * ((i - lo) / (hi - lo));
-      } else if (lo >= 0) {
-        yArr[i] = yArr[lo]! + (i - lo) * rowH;
-      } else if (hi < yArr.length) {
-        yArr[i] = yArr[hi]! - (hi - i) * rowH;
-      }
-    }
-
+    // Linearly interpolate each row's Y between the two anchors
+    const n = rows.length;
+    const rowH = Math.min(0.05, (lastRowY - firstRowY) / Math.max(n - 1, 1) * 0.85);
     const updatedRows = rows.map((r, i) => {
-      const yCenter = yArr[i];
-      if (yCenter === null) return { ...r, bbox: null };
+      const yCenter = n === 1
+        ? firstRowY
+        : firstRowY + (i / (n - 1)) * (lastRowY - firstRowY);
       return {
         ...r,
         bbox: {
