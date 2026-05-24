@@ -71,12 +71,7 @@ export default function AuthForm() {
         }),
       });
 
-      if (patRes.ok) {
-        const { pattern } = await patRes.json();
-        router.push(`/pattern/${pattern.id}`);
-      } else {
-        router.push("/dashboard");
-      }
+      router.push("/dashboard");
       router.refresh();
     } catch { setError("Network error"); }
     finally { setLoading(false); }
