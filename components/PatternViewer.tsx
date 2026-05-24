@@ -1,14 +1,11 @@
 "use client";
 import { useEffect, useRef, useCallback, useState } from "react";
 
-interface Row { label: string; steps: string[]; note?: string }
+interface Row { label: string; steps: string[]; note?: string; bbox?: { x: number; y: number; w: number; h: number } | null }
 interface Progress { currentRow: number; currentStep: number; lastUsed: string }
 interface Pattern { id: string; name: string; rows: Row[]; imageData?: string | null; progress?: Progress | null }
 
 const SAVE_DEBOUNCE = 1500;
-// Highlight dimensions as % of image element size — scales with any image
-const HL_W_PCT = 35;
-const HL_H_PCT = 7;
 
 export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const rows = pattern.rows as Row[];
@@ -23,6 +20,8 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   // Highlight position stored as % of image element dims — survives zoom/resize
   const [hlXPct, setHlXPct] = useState(5);
   const [hlYPct, setHlYPct] = useState(32); // start mid-page where row content typically lives
+  const [hlWPct, setHlWPct] = useState(35);
+  const [hlHPct, setHlHPct] = useState(7);
   const [hlHint, setHlHint] = useState(true); // disappears after first drag
   const [saving,       setSaving]       = useState(false);
   const [micActive,    setMicActive]    = useState(false);
@@ -30,6 +29,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const [lastCommand,  setLastCommand]  = useState("");
 
   const saveTimer        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomRef          = useRef(zoom);
   const rowRef           = useRef(currentRow);
   const stepRef          = useRef(currentStep);
   const recognitionRef   = useRef<any>(null);
@@ -47,6 +47,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
 
   rowRef.current  = currentRow;
   stepRef.current = currentStep;
+  zoomRef.current = zoom;
 
   const totalRows  = rows.length;
   const rowData    = rows[currentRow] ?? { label: "", steps: [] };
@@ -78,6 +79,24 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   useEffect(() => {
     if (zoom <= 1) { setPanX(0); setPanY(0); }
   }, [zoom]);
+
+  // Auto-snap highlight to current row's bbox when navigating in paper mode
+  useEffect(() => {
+    if (!paperMode) return;
+    const bbox = rows[currentRow]?.bbox;
+    if (!bbox) return;
+    setHlXPct(bbox.x * 100);
+    setHlYPct(bbox.y * 100);
+    setHlWPct(bbox.w * 100);
+    setHlHPct(bbox.h * 100);
+    if (imgRef.current) {
+      const imgH = imgRef.current.offsetHeight;
+      if (imgH > 0) {
+        const z = zoomRef.current;
+        setPanY(z * imgH * (0.5 - (bbox.y + bbox.h / 2)));
+      }
+    }
+  }, [currentRow, paperMode, rows]);
 
   const scheduleSave = useCallback((r: number, s: number) => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -192,8 +211,8 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     if (!imgW || !imgH) return;
     const pctDx = ((e.touches[0].clientX - hlDragRef.current.sx) / zoom / imgW) * 100;
     const pctDy = ((e.touches[0].clientY - hlDragRef.current.sy) / zoom / imgH) * 100;
-    setHlXPct(Math.max(0, Math.min(100 - HL_W_PCT, hlDragRef.current.shx + pctDx)));
-    setHlYPct(Math.max(0, Math.min(100 - HL_H_PCT, hlDragRef.current.shy + pctDy)));
+    setHlXPct(Math.max(0, Math.min(100 - hlWPct, hlDragRef.current.shx + pctDx)));
+    setHlYPct(Math.max(0, Math.min(100 - hlHPct, hlDragRef.current.shy + pctDy)));
   }
   function onHLTouchEnd(e: React.TouchEvent) { e.stopPropagation(); hlDragRef.current = null; }
 
@@ -282,8 +301,8 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
                 position: "absolute",
                 left: `${hlXPct}%`,
                 top: `${hlYPct}%`,
-                width: `${HL_W_PCT}%`,
-                height: `${HL_H_PCT}%`,
+                width: `${hlWPct}%`,
+                height: `${hlHPct}%`,
                 // 1/zoom keeps border visually 1px at any zoom level
                 border: `${1 / zoom}px solid #dc2626`,
                 borderRadius: `${2 / zoom}px`,

@@ -2,7 +2,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-interface Row { label: string; steps: string[]; note?: string }
+interface Row { label: string; steps: string[]; note?: string; bbox?: { x: number; y: number; w: number; h: number } | null }
 
 export default function PatternUpload({ onSave, onCancel }: { onSave: (name: string, rows: Row[], imageData: string) => Promise<void>; onCancel: () => void }) {
   const router = useRouter();

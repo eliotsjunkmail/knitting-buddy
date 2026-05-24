@@ -8,6 +8,7 @@ export interface PatternRow {
   label: string;
   steps: string[];
   note?: string;
+  bbox?: { x: number; y: number; w: number; h: number } | null;
 }
 
 export interface ParsedPattern {
@@ -44,7 +45,8 @@ Format:
     {
       "label": "Row 1",
       "steps": ["k2", "p2", "k2", "p2"],
-      "note": "optional note about this row"
+      "note": "optional note about this row",
+      "bbox": { "x": 0.05, "y": 0.12, "w": 0.90, "h": 0.04 }
     }
   ]
 }
@@ -56,7 +58,8 @@ Rules:
 - Keep special instructions like "repeat from * to last 3 sts" as single steps
 - Use the exact abbreviations shown in the pattern
 - Include row notes/instructions as the "note" field
-- If there are no visible rows, use rows: [{"label": "Row 1", "steps": ["Pattern text not recognized — please enter manually"], "note": ""}]`,
+- "bbox": the approximate bounding box of that row's text line as normalized coordinates { "x": 0–1, "y": 0–1, "w": 0–1, "h": 0–1 } where x/y are the top-left corner measured from the image top-left and w/h are the width/height, all as fractions of image dimensions. Set to null if the row position cannot be determined.
+- If there are no visible rows, use rows: [{"label": "Row 1", "steps": ["Pattern text not recognized — please enter manually"], "note": "", "bbox": null}]`,
           },
         ],
       },
@@ -69,7 +72,15 @@ Rules:
   try {
     const parsed = JSON.parse(cleaned);
     if (parsed && typeof parsed === "object" && Array.isArray(parsed.rows)) {
-      return { name: parsed.name || "", rows: parsed.rows as PatternRow[] };
+      const rows = parsed.rows as PatternRow[];
+      for (const row of rows) {
+        const b = row.bbox;
+        if (b && (typeof b.x !== "number" || typeof b.y !== "number" || typeof b.w !== "number" || typeof b.h !== "number"
+            || b.x < 0 || b.x > 1 || b.y < 0 || b.y > 1 || b.w <= 0 || b.w > 1 || b.h <= 0 || b.h > 1)) {
+          row.bbox = null;
+        }
+      }
+      return { name: parsed.name || "", rows };
     }
     if (Array.isArray(parsed)) {
       return { name: "", rows: parsed as PatternRow[] };

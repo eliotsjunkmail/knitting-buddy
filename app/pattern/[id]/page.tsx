@@ -20,7 +20,7 @@ export default async function PatternPage({ params }: { params: Promise<{ id: st
       pattern={{
         id: pattern.id,
         name: pattern.name,
-        rows: pattern.rows as { label: string; steps: string[] }[],
+        rows: pattern.rows as { label: string; steps: string[]; note?: string; bbox?: { x: number; y: number; w: number; h: number } | null }[],
         imageData: pattern.imageData,
         progress: pattern.progress
           ? {
