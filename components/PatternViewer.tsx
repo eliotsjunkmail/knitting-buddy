@@ -388,7 +388,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
 
   // ── Step mode ─────────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: "#f8f7ff", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100dvh", overflow: "hidden", background: "#f8f7ff", display: "flex", flexDirection: "column" }}>
       {header}
 
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
