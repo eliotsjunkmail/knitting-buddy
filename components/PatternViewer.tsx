@@ -188,6 +188,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   }
   function nextRow() { if (currentRow < totalRows - 1) navigate(currentRow + 1, 0); }
   function prevRow() { if (currentRow > 0) navigate(currentRow - 1, 0); }
+  function restart() { navigate(0, 0); }
 
   nextStepRef.current = nextStep;
   prevStepRef.current = prevStep;
@@ -213,7 +214,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
       const t = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
       if (t.includes("next row")) { nextRow(); setLastCommand("next row"); }
       else if (t.includes("prev row") || t.includes("previous row")) { prevRow(); setLastCommand("prev row"); }
-      else if (t.includes("next") || t.includes("forward")) { nextStepRef.current(); setLastCommand("next step"); }
+      else if (t.includes("knit next")) { nextStepRef.current(); setLastCommand("knit next"); }
       else if (t.includes("back") || t.includes("prev") || t.includes("previous")) { prevStepRef.current(); setLastCommand("prev step"); }
     };
     recognition.onend = () => { if (micActiveRef.current) { try { recognition.start(); } catch {} } };
@@ -506,17 +507,20 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
                 <span style={{ fontSize: "0.72rem", color: "#a78bfa", background: "rgba(167,139,250,0.12)", padding: "0.2rem 0.65rem", borderRadius: "99px" }}>heard: {lastCommand}</span>
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: micSupported ? "1fr auto 1fr" : "1fr 1fr", gap: "0.5rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: micSupported ? "1fr auto 1fr" : "1fr 1fr", gap: "0.5rem", marginBottom: "0.4rem" }}>
               <button onClick={prevStep} disabled={isAtStart} style={{ padding: "0.75rem", background: isAtStart ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.1)", color: isAtStart ? "rgba(255,255,255,0.25)" : "white", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: isAtStart ? "not-allowed" : "pointer", opacity: isAtStart ? 0.5 : 1 }}>
                 ← Prev
               </button>
               {micSupported && (
                 <button onClick={micActive ? stopListening : startListening} style={{ width: "52px", padding: "0.75rem 0", background: micActive ? "linear-gradient(135deg,#7c3aed,#6d28d9)" : "rgba(255,255,255,0.08)", color: "white", border: micActive ? "none" : "1px solid rgba(255,255,255,0.15)", borderRadius: "10px", fontSize: "1.25rem", cursor: "pointer", boxShadow: micActive ? "0 0 0 3px rgba(124,58,237,0.35)" : "none", transition: "all 0.2s" }}>🎤</button>
               )}
-              <button onClick={nextStep} disabled={isAtEnd} style={{ padding: "0.75rem", background: isAtEnd ? "rgba(124,58,237,0.3)" : "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "white", border: "none", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: isAtEnd ? "not-allowed" : "pointer", opacity: isAtEnd ? 0.5 : 1, boxShadow: isAtEnd ? "none" : "0 4px 12px rgba(124,58,237,0.3)" }}>
-                Next →
+              <button onClick={isAtEnd ? restart : nextStep} style={{ padding: "0.75rem", background: isAtEnd ? "linear-gradient(135deg,#dc2626,#b91c1c)" : "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "white", border: "none", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", boxShadow: isAtEnd ? "0 4px 12px rgba(220,38,38,0.35)" : "0 4px 12px rgba(124,58,237,0.3)" }}>
+                {isAtEnd ? "↺ Restart" : "Next →"}
               </button>
             </div>
+            <button onClick={restart} disabled={isAtStart} style={{ width: "100%", padding: "0.4rem", background: "transparent", color: isAtStart ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.38)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 500, cursor: isAtStart ? "not-allowed" : "pointer", letterSpacing: "0.02em" }}>
+              ↺ Restart from beginning
+            </button>
           </div>
         </div>
       </div>
@@ -543,10 +547,22 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
             {rowData.label}
             {rowData.note && <div style={{ textTransform: "none", fontWeight: 400, fontStyle: "italic", marginTop: "0.25rem" }}>{rowData.note}</div>}
           </div>
-          <div style={{ fontSize: "clamp(1.75rem, 6vw, 2.5rem)", fontWeight: 800, color: "#4c1d95", fontFamily: "monospace", lineHeight: 1.2, wordBreak: "break-word" }}>
-            {isAtEnd ? "🎉 Done!" : (rowData.steps[currentStep] ?? "—")}
-          </div>
-          <div style={{ marginTop: "1rem", fontSize: "0.78rem", color: "#c4b5fd" }}>step {currentStep + 1} of {totalSteps}</div>
+          {isAtEnd ? (
+            <>
+              <div style={{ fontSize: "2.5rem", marginBottom: "0.5rem" }}>🎉</div>
+              <div style={{ fontSize: "clamp(1.25rem, 5vw, 1.75rem)", fontWeight: 800, color: "#4c1d95", lineHeight: 1.3 }}>Pattern complete!</div>
+              <button onClick={restart} style={{ marginTop: "1.25rem", padding: "0.75rem 1.5rem", background: "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "white", border: "none", borderRadius: "10px", fontSize: "0.95rem", fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(124,58,237,0.3)", fontFamily: "inherit" }}>
+                ↺ Start over
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: "clamp(1.75rem, 6vw, 2.5rem)", fontWeight: 800, color: "#4c1d95", fontFamily: "monospace", lineHeight: 1.2, wordBreak: "break-word" }}>
+                {rowData.steps[currentStep] ?? "—"}
+              </div>
+              <div style={{ marginTop: "1rem", fontSize: "0.78rem", color: "#c4b5fd" }}>step {currentStep + 1} of {totalSteps}</div>
+            </>
+          )}
         </div>
 
         <div style={{ textAlign: "center", opacity: 0.35, minHeight: "2.5rem", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
@@ -569,10 +585,11 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
             {micSupported && (
               <button onClick={micActive ? stopListening : startListening} style={{ width: "52px", padding: "0.875rem 0", background: micActive ? "linear-gradient(135deg,#7c3aed,#6d28d9)" : "#f5f3ff", color: micActive ? "white" : "#7c3aed", border: micActive ? "none" : "2px solid #ede9fe", borderRadius: "10px", fontSize: "1.25rem", cursor: "pointer", boxShadow: micActive ? "0 0 0 4px rgba(124,58,237,0.2)" : "none", transition: "all 0.2s" }}>🎤</button>
             )}
-            <button onClick={nextStep} disabled={isAtEnd} style={{ padding: "0.875rem", background: isAtEnd ? "#c4b5fd" : "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "white", border: "none", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: isAtEnd ? "not-allowed" : "pointer", opacity: isAtEnd ? 0.5 : 1, boxShadow: isAtEnd ? "none" : "0 4px 12px rgba(124,58,237,0.3)" }}>Next →</button>
+            <button onClick={isAtEnd ? restart : nextStep} style={{ padding: "0.875rem", background: isAtEnd ? "linear-gradient(135deg,#dc2626,#b91c1c)" : "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "white", border: "none", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", boxShadow: isAtEnd ? "0 4px 12px rgba(220,38,38,0.3)" : "0 4px 12px rgba(124,58,237,0.3)" }}>{isAtEnd ? "↺ Restart" : "Next →"}</button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.625rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.625rem" }}>
             <button onClick={prevRow} disabled={currentRow === 0} style={{ padding: "0.5rem", background: "transparent", color: "#a78bfa", border: "1px solid #ede9fe", borderRadius: "8px", fontSize: "0.8rem", cursor: currentRow === 0 ? "not-allowed" : "pointer", opacity: currentRow === 0 ? 0.4 : 1 }}>↑ Prev Row</button>
+            <button onClick={restart} disabled={isAtStart} style={{ padding: "0.5rem", background: "transparent", color: "#a78bfa", border: "1px solid #ede9fe", borderRadius: "8px", fontSize: "0.8rem", cursor: isAtStart ? "not-allowed" : "pointer", opacity: isAtStart ? 0.3 : 1 }}>↺ Restart</button>
             <button onClick={nextRow} disabled={currentRow === totalRows - 1} style={{ padding: "0.5rem", background: "transparent", color: "#a78bfa", border: "1px solid #ede9fe", borderRadius: "8px", fontSize: "0.8rem", cursor: currentRow === totalRows - 1 ? "not-allowed" : "pointer", opacity: currentRow === totalRows - 1 ? 0.4 : 1 }}>↓ Next Row</button>
           </div>
         </div>

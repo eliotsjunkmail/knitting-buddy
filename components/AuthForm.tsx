@@ -43,7 +43,7 @@ export default function AuthForm() {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <div style={{ width: "64px", height: "64px", background: "rgba(255,255,255,0.15)", borderRadius: "20px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem", fontSize: "2rem", backdropFilter: "blur(10px)" }}>🧶</div>
-          <h1 style={{ color: "white", fontSize: "1.75rem", fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Knitting Buddy</h1>
+          <h1 style={{ color: "white", fontSize: "1.75rem", fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>Knit Next</h1>
           <p style={{ color: "rgba(255,255,255,0.7)", marginTop: "0.375rem", fontSize: "0.9rem" }}>Follow your patterns, stitch by stitch</p>
         </div>
 

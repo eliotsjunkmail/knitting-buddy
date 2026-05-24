@@ -118,7 +118,7 @@ export default function DashboardPage() {
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <span style={{ fontSize: "1.5rem" }}>🧶</span>
             <div>
-              <div style={{ color: "white", fontWeight: 700, fontSize: "1rem" }}>Knitting Buddy</div>
+              <div style={{ color: "white", fontWeight: 700, fontSize: "1rem" }}>Knit Next</div>
               <div style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.72rem" }}>
                 {user?.isGuest ? "Browsing as guest" : `Hi, ${user?.username}!`}
               </div>
