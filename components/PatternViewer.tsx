@@ -8,7 +8,7 @@ interface Pattern { id: string; name: string; rows: Row[]; imageData?: string | 
 const SAVE_DEBOUNCE = 1500;
 
 export default function PatternViewer({ pattern }: { pattern: Pattern }) {
-  const rows = pattern.rows as Row[];
+  const [rows, setRows] = useState<Row[]>(pattern.rows as Row[]);
   const init = pattern.progress;
 
   const [currentRow,  setCurrentRow]  = useState(init?.currentRow  ?? 0);
@@ -23,12 +23,14 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const [hlWPct, setHlWPct] = useState(35);
   const [hlHPct, setHlHPct] = useState(7);
   const [hlHint, setHlHint] = useState(true); // disappears after first drag
+  const [bboxDetecting, setBboxDetecting] = useState(false);
   const [saving,       setSaving]       = useState(false);
   const [micActive,    setMicActive]    = useState(false);
   const [micSupported, setMicSupported] = useState(false);
   const [lastCommand,  setLastCommand]  = useState("");
 
   const saveTimer        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bboxFetchedRef   = useRef(false);
   const zoomRef          = useRef(zoom);
   const rowRef           = useRef(currentRow);
   const stepRef          = useRef(currentStep);
@@ -79,6 +81,20 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   useEffect(() => {
     if (zoom <= 1) { setPanX(0); setPanY(0); }
   }, [zoom]);
+
+  // Detect row positions the first time Paper mode is opened for a pattern with no bboxes
+  useEffect(() => {
+    if (!paperMode || !pattern.imageData || bboxFetchedRef.current) return;
+    if (rows.some(r => r.bbox != null)) return;
+    bboxFetchedRef.current = true;
+    setBboxDetecting(true);
+    fetch(`/api/patterns/${pattern.id}/detect-bboxes`, { method: "POST" })
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data.rows)) setRows(data.rows as Row[]); })
+      .catch(() => {})
+      .finally(() => setBboxDetecting(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paperMode]);
 
   // Auto-snap highlight to current row's bbox when navigating in paper mode
   useEffect(() => {
@@ -313,7 +329,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
                 zIndex: 2,
               }}
             >
-              {hlHint && (
+              {hlHint && !rows[currentRow]?.bbox && (
                 <div style={{
                   position: "absolute",
                   top: "100%",
@@ -333,6 +349,13 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
               )}
             </div>
           </div>
+
+          {/* Locating-rows overlay */}
+          {bboxDetecting && (
+            <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.65)", color: "white", fontSize: "0.72rem", padding: "0.3rem 0.8rem", borderRadius: "99px", zIndex: 10, whiteSpace: "nowrap", pointerEvents: "none" }}>
+              Locating rows…
+            </div>
+          )}
 
           {/* Floating zoom controls */}
           <div style={{ position: "absolute", top: 8, right: 10, display: "flex", flexDirection: "column", gap: "4px", zIndex: 10 }}>
