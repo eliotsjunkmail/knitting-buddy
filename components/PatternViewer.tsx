@@ -117,7 +117,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paperMode]);
 
-  // Auto-snap highlight to current row's bbox when navigating in paper mode
+  // Auto-snap highlight + zoom to current row's bbox when navigating in paper mode
   useEffect(() => {
     if (!paperMode) return;
     const bbox = rows[currentRow]?.bbox;
@@ -126,11 +126,15 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     setHlYPct(bbox.y * 100);
     setHlWPct(bbox.w * 100);
     setHlHPct(bbox.h * 100);
+    // Zoom in to 2.5x if we're at 1x so individual rows are readable.
+    // Don't override if the user has already zoomed in more.
+    const targetZoom = zoomRef.current < 1.5 ? 2.5 : zoomRef.current;
+    if (targetZoom !== zoomRef.current) setZoom(targetZoom);
     if (imgRef.current) {
       const imgH = imgRef.current.offsetHeight;
       if (imgH > 0) {
-        const z = zoomRef.current;
-        setPanY(z * imgH * (0.5 - (bbox.y + bbox.h / 2)));
+        const rowCenterY = bbox.y + bbox.h / 2;
+        setPanY(targetZoom * imgH * (0.5 - rowCenterY));
       }
     }
   }, [currentRow, paperMode, rows]);
