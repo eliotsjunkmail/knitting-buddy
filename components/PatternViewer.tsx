@@ -129,15 +129,11 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     setHlYPct(bbox.y * 100);
     setHlWPct(bbox.w * 100);
     setHlHPct(bbox.h * 100);
-    // Zoom in to 2.5x if we're at 1x so individual rows are readable.
-    // Don't override if the user has already zoomed in more.
-    const targetZoom = zoomRef.current < 1.5 ? 2.5 : zoomRef.current;
-    if (targetZoom !== zoomRef.current) setZoom(targetZoom);
     if (imgRef.current) {
       const imgH = imgRef.current.offsetHeight;
       if (imgH > 0) {
         const rowCenterY = bbox.y + bbox.h / 2;
-        setPanY(targetZoom * imgH * (0.5 - rowCenterY));
+        setPanY(zoomRef.current * imgH * (0.5 - rowCenterY));
       }
     }
   }, [currentRow, paperMode, rows]);
@@ -151,10 +147,9 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     const docH = docEl.offsetHeight;
     if (!docH) return;
     const rowFrac = (rowEl.offsetTop + rowEl.offsetHeight / 2) / docH;
-    const targetZoom = zoomRef.current < 1.5 ? 2.5 : zoomRef.current;
-    if (targetZoom !== zoomRef.current) setZoom(targetZoom);
+    const z = zoomRef.current;
     setPanX(0);
-    setPanY(targetZoom * docH * (0.5 - rowFrac));
+    setPanY(z * docH * (0.5 - rowFrac));
   }, [currentRow, paperMode, docMode]);
 
   const scheduleSave = useCallback((r: number, s: number) => {
@@ -347,9 +342,9 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
               /* ── Doc view: clean text rendering with exact row positions ── */
               <div
                 ref={docDivRef}
-                style={{ width: "640px", background: "white", padding: "20px 16px 32px", fontFamily: "ui-monospace, 'Courier New', monospace" }}
+                style={{ width: "100vw", background: "white", padding: "20px 14px 40px", fontFamily: "ui-monospace, 'Courier New', monospace" }}
               >
-                <div style={{ fontWeight: 700, color: "#4c1d95", fontSize: "13px", textAlign: "center", marginBottom: "14px", fontFamily: "system-ui, sans-serif" }}>
+                <div style={{ fontWeight: 700, color: "#4c1d95", fontSize: "15px", textAlign: "center", marginBottom: "14px", fontFamily: "system-ui, sans-serif" }}>
                   {pattern.name}
                 </div>
                 {rows.map((row, i) => {
@@ -360,22 +355,22 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
                       key={i}
                       ref={el => { rowRefs.current[i] = el; }}
                       style={{
-                        padding: "5px 8px",
+                        padding: "6px 10px",
                         margin: "1px 0",
                         border: `${1 / zoom}px solid ${isCurrent ? "#dc2626" : "transparent"}`,
                         borderRadius: `${3 / zoom}px`,
                         background: isCurrent ? "rgba(255,255,210,0.6)" : "transparent",
                         opacity: isDone ? 0.38 : 1,
-                        lineHeight: 1.45,
+                        lineHeight: 1.5,
                       }}
                     >
-                      <span style={{ fontWeight: 700, color: "#1e1b4b", fontSize: "13px", textDecoration: isDone ? "line-through" : "none" }}>
+                      <span style={{ fontWeight: 700, color: "#1e1b4b", fontSize: "15px", textDecoration: isDone ? "line-through" : "none" }}>
                         {row.label}:
                       </span>{" "}
-                      <span style={{ color: "#374151", fontSize: "13px", textDecoration: isDone ? "line-through" : "none" }}>
+                      <span style={{ color: "#374151", fontSize: "15px", textDecoration: isDone ? "line-through" : "none" }}>
                         {row.steps.join(", ")}
                       </span>
-                      {row.note && <div style={{ fontSize: "11px", color: "#6b7280", fontStyle: "italic", marginTop: "1px" }}>{row.note}</div>}
+                      {row.note && <div style={{ fontSize: "12px", color: "#6b7280", fontStyle: "italic", marginTop: "2px" }}>{row.note}</div>}
                     </div>
                   );
                 })}
