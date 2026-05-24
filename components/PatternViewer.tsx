@@ -24,6 +24,7 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const [hlHPct, setHlHPct] = useState(7);
   const [hlHint, setHlHint] = useState(true); // disappears after first drag
   const [bboxDetecting, setBboxDetecting] = useState(false);
+  const [bboxFailed, setBboxFailed] = useState(false);
   const [saving,       setSaving]       = useState(false);
   const [micActive,    setMicActive]    = useState(false);
   const [micSupported, setMicSupported] = useState(false);
@@ -82,17 +83,32 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     if (zoom <= 1) { setPanX(0); setPanY(0); }
   }, [zoom]);
 
-  // Detect row positions the first time Paper mode is opened for a pattern with no bboxes
-  useEffect(() => {
-    if (!paperMode || !pattern.imageData || bboxFetchedRef.current) return;
-    if (rows.some(r => r.bbox != null)) return;
+  function runBboxDetection() {
     bboxFetchedRef.current = true;
     setBboxDetecting(true);
+    setBboxFailed(false);
     fetch(`/api/patterns/${pattern.id}/detect-bboxes`, { method: "POST" })
       .then(r => r.json())
-      .then(data => { if (Array.isArray(data.rows)) setRows(data.rows as Row[]); })
-      .catch(() => {})
+      .then(data => {
+        if (Array.isArray(data.rows)) {
+          setRows(data.rows as Row[]);
+          const hasAny = (data.rows as Row[]).some(r => r.bbox != null);
+          if (!hasAny) { setBboxFailed(true); bboxFetchedRef.current = false; }
+        }
+      })
+      .catch(() => { setBboxFailed(true); bboxFetchedRef.current = false; })
       .finally(() => setBboxDetecting(false));
+  }
+
+  // Detect row positions the first time Paper mode is opened for a pattern with no bboxes,
+  // or when existing bboxes look wrong (all clustered in the top 55% = typical bad detection).
+  useEffect(() => {
+    if (!paperMode || !pattern.imageData || bboxFetchedRef.current) return;
+    const validBboxes = rows.map(r => r.bbox).filter(Boolean) as { y: number }[];
+    const hasBboxes = validBboxes.length > 0;
+    const looksWrong = hasBboxes && validBboxes.every(b => b.y < 0.55);
+    if (hasBboxes && !looksWrong) return;
+    runBboxDetection();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paperMode]);
 
@@ -350,10 +366,18 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
             </div>
           </div>
 
-          {/* Locating-rows overlay */}
+          {/* Row-detection status overlays */}
           {bboxDetecting && (
             <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.65)", color: "white", fontSize: "0.72rem", padding: "0.3rem 0.8rem", borderRadius: "99px", zIndex: 10, whiteSpace: "nowrap", pointerEvents: "none" }}>
               Locating rows…
+            </div>
+          )}
+          {bboxFailed && !bboxDetecting && (
+            <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.72)", color: "white", fontSize: "0.72rem", padding: "0.3rem 0.8rem", borderRadius: "99px", zIndex: 10, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span>Could not locate rows</span>
+              <button onClick={runBboxDetection} style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", borderRadius: "4px", padding: "0.1rem 0.4rem", cursor: "pointer", fontSize: "0.72rem" }}>
+                Retry
+              </button>
             </div>
           )}
 
