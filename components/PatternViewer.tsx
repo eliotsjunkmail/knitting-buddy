@@ -13,8 +13,8 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
 
   const [currentRow,  setCurrentRow]  = useState(init?.currentRow  ?? 0);
   const [currentStep, setCurrentStep] = useState(init?.currentStep ?? 0);
-  const [paperMode,   setPaperMode]   = useState(false);
-  const [docMode,     setDocMode]     = useState(true);  // default: clean doc view (exact positions)
+  const [paperMode,   setPaperMode]   = useState(true);   // default: Page mode
+  const [docMode,     setDocMode]     = useState(true);   // default: clean doc view (exact positions)
   const [zoom,  setZoom]  = useState(1);
   const [panX,  setPanX]  = useState(0);
   const [panY,  setPanY]  = useState(0);
@@ -47,7 +47,6 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   const stepsScrollRef   = useRef<HTMLDivElement>(null);
   const imgRef           = useRef<HTMLImageElement>(null);
   const docDivRef        = useRef<HTMLDivElement>(null);
-  const rowRefs          = useRef<(HTMLDivElement | null)[]>([]);
   // Stores starting touch + starting hl percentage at drag onset
   const hlDragRef = useRef<{ sx: number; sy: number; shx: number; shy: number } | null>(null);
 
@@ -64,6 +63,13 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     setMicSupported(!!SR);
+  }, []);
+
+  // Restore saved view mode from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("kb_view_mode");
+    if (saved === "step") setPaperMode(false);
+    // "page" or unset → stay in Page mode (already the default)
   }, []);
 
   // Prevent browser scroll/zoom in paper mode
@@ -138,14 +144,16 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
     }
   }, [currentRow, paperMode, rows]);
 
-  // Doc-view auto-pan: centre current row using exact DOM measurements
+  // Doc-view auto-pan: centre current row using exact DOM measurements.
+  // children[0] = title div, children[i+1] = row i
   useEffect(() => {
     if (!paperMode || !docMode) return;
-    const rowEl = rowRefs.current[currentRow];
     const docEl = docDivRef.current;
-    if (!rowEl || !docEl) return;
+    if (!docEl) return;
     const docH = docEl.offsetHeight;
     if (!docH) return;
+    const rowEl = docEl.children[currentRow + 1] as HTMLElement | undefined;
+    if (!rowEl) return;
     const rowFrac = (rowEl.offsetTop + rowEl.offsetHeight / 2) / docH;
     const z = zoomRef.current;
     setPanX(0);
@@ -298,13 +306,13 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
         </div>
         {hasPaperOrRows && (
           <div style={{ display: "flex", background: "rgba(0,0,0,0.28)", borderRadius: "20px", padding: "3px", gap: "2px" }}>
-            <button onClick={() => setPaperMode(false)}
+            <button onClick={() => { setZoom(1); setPanX(0); setPanY(0); setDocMode(true); setPaperMode(true); localStorage.setItem("kb_view_mode", "page"); }}
+              style={{ padding: "5px 12px", borderRadius: "16px", background: paperMode ? "white" : "transparent", color: paperMode ? "#4c1d95" : "rgba(255,255,255,0.75)", border: "none", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}>
+              Page
+            </button>
+            <button onClick={() => { setPaperMode(false); localStorage.setItem("kb_view_mode", "step"); }}
               style={{ padding: "5px 12px", borderRadius: "16px", background: !paperMode ? "white" : "transparent", color: !paperMode ? "#4c1d95" : "rgba(255,255,255,0.75)", border: "none", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}>
               Step
-            </button>
-            <button onClick={() => { setZoom(1); setPanX(0); setPanY(0); setDocMode(true); setPaperMode(true); }}
-              style={{ padding: "5px 12px", borderRadius: "16px", background: paperMode ? "white" : "transparent", color: paperMode ? "#4c1d95" : "rgba(255,255,255,0.75)", border: "none", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}>
-              Paper
             </button>
           </div>
         )}
@@ -353,7 +361,6 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
                   return (
                     <div
                       key={i}
-                      ref={el => { rowRefs.current[i] = el; }}
                       style={{
                         padding: "6px 10px",
                         margin: "1px 0",
@@ -493,13 +500,23 @@ export default function PatternViewer({ pattern }: { pattern: Pattern }) {
 
         {/* Nav buttons */}
         <div style={{ background: "#1a1a2e", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" }}>
-          <div style={{ padding: "0.5rem 0.75rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-            <button onClick={prevStep} disabled={isAtStart} style={{ padding: "0.75rem", background: isAtStart ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.1)", color: isAtStart ? "rgba(255,255,255,0.25)" : "white", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: isAtStart ? "not-allowed" : "pointer", opacity: isAtStart ? 0.5 : 1 }}>
-              ← Prev
-            </button>
-            <button onClick={nextStep} disabled={isAtEnd} style={{ padding: "0.75rem", background: isAtEnd ? "rgba(124,58,237,0.3)" : "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "white", border: "none", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: isAtEnd ? "not-allowed" : "pointer", opacity: isAtEnd ? 0.5 : 1, boxShadow: isAtEnd ? "none" : "0 4px 12px rgba(124,58,237,0.3)" }}>
-              Next →
-            </button>
+          <div style={{ padding: "0.5rem 0.75rem 0.5rem" }}>
+            {micActive && lastCommand && (
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.375rem" }}>
+                <span style={{ fontSize: "0.72rem", color: "#a78bfa", background: "rgba(167,139,250,0.12)", padding: "0.2rem 0.65rem", borderRadius: "99px" }}>heard: {lastCommand}</span>
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: micSupported ? "1fr auto 1fr" : "1fr 1fr", gap: "0.5rem" }}>
+              <button onClick={prevStep} disabled={isAtStart} style={{ padding: "0.75rem", background: isAtStart ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.1)", color: isAtStart ? "rgba(255,255,255,0.25)" : "white", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: isAtStart ? "not-allowed" : "pointer", opacity: isAtStart ? 0.5 : 1 }}>
+                ← Prev
+              </button>
+              {micSupported && (
+                <button onClick={micActive ? stopListening : startListening} style={{ width: "52px", padding: "0.75rem 0", background: micActive ? "linear-gradient(135deg,#7c3aed,#6d28d9)" : "rgba(255,255,255,0.08)", color: "white", border: micActive ? "none" : "1px solid rgba(255,255,255,0.15)", borderRadius: "10px", fontSize: "1.25rem", cursor: "pointer", boxShadow: micActive ? "0 0 0 3px rgba(124,58,237,0.35)" : "none", transition: "all 0.2s" }}>🎤</button>
+              )}
+              <button onClick={nextStep} disabled={isAtEnd} style={{ padding: "0.75rem", background: isAtEnd ? "rgba(124,58,237,0.3)" : "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "white", border: "none", borderRadius: "10px", fontSize: "0.875rem", fontWeight: 600, cursor: isAtEnd ? "not-allowed" : "pointer", opacity: isAtEnd ? 0.5 : 1, boxShadow: isAtEnd ? "none" : "0 4px 12px rgba(124,58,237,0.3)" }}>
+                Next →
+              </button>
+            </div>
           </div>
         </div>
       </div>
